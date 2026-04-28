@@ -1,0 +1,345 @@
+<?php
+require_once '../includes/auth.php';
+require_once '../includes/db.php';
+requireAuth();
+
+$usuario = usuarioActual();
+$isAdmin = $usuario['rol'] === 'administrador';
+
+// Stats
+$totalUsuarios = $pdo->query("SELECT COUNT(*) FROM usuarios")->fetchColumn();
+$totalAdmin    = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol='administrador'")->fetchColumn();
+$totalOper     = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE rol='operador'")->fetchColumn();
+$activos       = $pdo->query("SELECT COUNT(*) FROM usuarios WHERE activo=1")->fetchColumn();
+
+// Últimos usuarios
+$recentUsers = $pdo->query("SELECT * FROM usuarios ORDER BY id DESC LIMIT 5")->fetchAll();
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusPanel — Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/dashboard.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <div class="logo-icon-sm">
+                <i class="fa-solid fa-hexagon-nodes"></i>
+            </div>
+            <span class="logo-text-sm">Nexus<strong>Panel</strong></span>
+        </div>
+        <button class="sidebar-toggle" id="sidebarToggle">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+    </div>
+
+    <!-- User info -->
+    <div class="sidebar-user">
+        <div class="user-avatar">
+            <?= strtoupper(substr($usuario['nombre'], 0, 1)) ?>
+        </div>
+        <div class="user-info">
+            <span class="user-name"><?= htmlspecialchars($usuario['nombre']) ?></span>
+            <span class="user-role <?= $isAdmin ? 'role-admin' : 'role-operator' ?>">
+                <i class="fa-solid <?= $isAdmin ? 'fa-shield-halved' : 'fa-user-gear' ?>"></i>
+                <?= ucfirst($usuario['rol']) ?>
+            </span>
+        </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="sidebar-nav">
+        <div class="nav-section-label">Principal</div>
+        <a href="dashboard.php" class="nav-item active">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Dashboard</span>
+            <div class="nav-indicator"></div>
+        </a>
+        <?php if ($isAdmin): ?>
+        <a href="usuarios.php" class="nav-item">
+            <i class="fa-solid fa-users"></i>
+            <span>Usuarios</span>
+        </a>
+        <a href="productos.php" class="nav-item">
+            <i class="fa-solid fa-flask-vial"></i>
+            <span>Productos</span>
+        </a>
+        <?php endif; ?>
+
+        <div class="nav-section-label">Operaciones</div>
+        <a href="mapa.php" class="nav-item">
+            <i class="fa-solid fa-map-location-dot"></i>
+            <span>Mapa de Usuarios</span>
+        </a>
+
+        <div class="nav-section-label">Cuenta</div>
+        <a href="../logout.php" class="nav-item nav-logout">
+            <i class="fa-solid fa-right-from-bracket"></i>
+            <span>Cerrar sesión</span>
+        </a>
+    </nav>
+</aside>
+
+<!-- MAIN -->
+<main class="main-content" id="mainContent">
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <div class="topbar-left">
+            <button class="mobile-menu-btn" id="mobileMenu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="breadcrumb-custom">
+                <span>NexusPanel</span>
+                <i class="fa-solid fa-chevron-right"></i>
+                <span class="active">Dashboard</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="topbar-date" id="topbarDate"></div>
+            <button class="topbar-btn">
+                <i class="fa-solid fa-bell"></i>
+                <span class="notif-dot"></span>
+            </button>
+            <div class="topbar-avatar">
+                <?= strtoupper(substr($usuario['nombre'], 0, 1)) ?>
+            </div>
+        </div>
+    </header>
+
+    <!-- Content -->
+    <div class="content-area">
+
+        <!-- Welcome banner -->
+        <div class="welcome-banner">
+            <div class="welcome-text">
+                <h1>Bienvenido, <?= htmlspecialchars(explode(' ', $usuario['nombre'])[0]) ?> 👋</h1>
+                <p>Panel de <?= $isAdmin ? 'Administración — acceso completo al sistema.' : 'Operaciones — gestión de tareas y reportes.' ?></p>
+            </div>
+            <div class="welcome-badge <?= $isAdmin ? 'badge-admin' : 'badge-operator' ?>">
+                <i class="fa-solid <?= $isAdmin ? 'fa-shield-halved' : 'fa-user-gear' ?>"></i>
+                <?= ucfirst($usuario['rol']) ?>
+            </div>
+        </div>
+
+        <!-- Stats grid -->
+        <div class="stats-grid">
+            <div class="stat-card" style="--card-accent: #00d4ff;">
+                <div class="stat-card-icon" style="background: rgba(0,212,255,0.1); color: #00d4ff;">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <div class="stat-card-data">
+                    <span class="stat-card-number counter" data-target="<?= $totalUsuarios ?>"><?= $totalUsuarios ?></span>
+                    <span class="stat-card-label">Total Usuarios</span>
+                </div>
+                <div class="stat-card-trend up">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                    <span>+12% este mes</span>
+                </div>
+            </div>
+
+            <div class="stat-card" style="--card-accent: #f59e0b;">
+                <div class="stat-card-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div class="stat-card-data">
+                    <span class="stat-card-number counter" data-target="<?= $totalAdmin ?>"><?= $totalAdmin ?></span>
+                    <span class="stat-card-label">Administradores</span>
+                </div>
+                <div class="stat-card-trend up">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Todos activos</span>
+                </div>
+            </div>
+
+            <div class="stat-card" style="--card-accent: #00d4ff;">
+                <div class="stat-card-icon" style="background: rgba(0,212,255,0.08); color: #00d4ff;">
+                    <i class="fa-solid fa-user-gear"></i>
+                </div>
+                <div class="stat-card-data">
+                    <span class="stat-card-number counter" data-target="<?= $totalOper ?>"><?= $totalOper ?></span>
+                    <span class="stat-card-label">Operadores</span>
+                </div>
+                <div class="stat-card-trend">
+                    <i class="fa-solid fa-circle"></i>
+                    <span>Sin cambios</span>
+                </div>
+            </div>
+
+            <div class="stat-card" style="--card-accent: #10b981;">
+                <div class="stat-card-icon" style="background: rgba(16,185,129,0.1); color: #10b981;">
+                    <i class="fa-solid fa-circle-check"></i>
+                </div>
+                <div class="stat-card-data">
+                    <span class="stat-card-number counter" data-target="<?= $activos ?>"><?= $activos ?></span>
+                    <span class="stat-card-label">Usuarios Activos</span>
+                </div>
+                <div class="stat-card-trend up">
+                    <i class="fa-solid fa-arrow-trend-up"></i>
+                    <span>100% operativos</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content grid -->
+        <div class="content-grid">
+
+            <!-- Users table -->
+            <div class="card-panel span-2">
+                <div class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Usuarios del Sistema</h3>
+                        <p class="panel-subtitle">Últimos registros</p>
+                    </div>
+                    <?php if ($isAdmin): ?>
+                    <a href="usuarios.php" class="btn-panel">
+                        <i class="fa-solid fa-plus"></i>
+                        Gestionar
+                    </a>
+                    <?php endif; ?>
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Usuario</th>
+                                <th>Email</th>
+                                <th>Teléfono</th>
+                                <th>Edad</th>
+                                <th>Rol</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($recentUsers as $u): ?>
+                            <tr class="table-row-animate">
+                                <td>
+                                    <div class="table-user">
+                                        <div class="table-avatar">
+                                            <?= strtoupper(substr($u['nombre'], 0, 1)) ?>
+                                        </div>
+                                        <div>
+                                            <div><?= htmlspecialchars($u['nombre']) ?></div>
+                                            <?php if (!empty($u['domicilio'])): ?>
+                                            <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">
+                                                <i class="fa-solid fa-location-dot" style="font-size:10px;"></i>
+                                                <?= htmlspecialchars(mb_strimwidth($u['domicilio'],0,28,'…')) ?>
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="table-email"><?= htmlspecialchars($u['email']) ?></span></td>
+                                <td><span class="table-date"><?= htmlspecialchars($u['telefono'] ?? '—') ?></span></td>
+                                <td><span class="table-date"><?= $u['edad'] ? $u['edad'].' años' : '—' ?></span></td>
+                                <td>
+                                    <span class="role-pill <?= $u['rol'] === 'administrador' ? 'pill-admin' : 'pill-operator' ?>">
+                                        <i class="fa-solid <?= $u['rol'] === 'administrador' ? 'fa-shield-halved' : 'fa-user-gear' ?>"></i>
+                                        <?= ucfirst($u['rol']) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="status-pill <?= $u['activo'] ? 'pill-active' : 'pill-inactive' ?>">
+                                        <span class="status-dot-sm"></span>
+                                        <?= $u['activo'] ? 'Activo' : 'Inactivo' ?>
+                                    </span>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Activity panel -->
+            <div class="card-panel">
+                <div class="panel-header">
+                    <div>
+                        <h3 class="panel-title">Actividad Reciente</h3>
+                        <p class="panel-subtitle">Últimas acciones</p>
+                    </div>
+                </div>
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <div class="activity-icon green"><i class="fa-solid fa-right-to-bracket"></i></div>
+                        <div class="activity-info">
+                            <span class="activity-msg">Inicio de sesión exitoso</span>
+                            <span class="activity-time">Ahora mismo</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon blue"><i class="fa-solid fa-users"></i></div>
+                        <div class="activity-info">
+                            <span class="activity-msg">Sistema de usuarios actualizado</span>
+                            <span class="activity-time">Hace 2 min</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon yellow"><i class="fa-solid fa-shield-halved"></i></div>
+                        <div class="activity-info">
+                            <span class="activity-msg">Permisos verificados</span>
+                            <span class="activity-time">Hace 5 min</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon purple"><i class="fa-solid fa-database"></i></div>
+                        <div class="activity-info">
+                            <span class="activity-msg">Base de datos sincronizada</span>
+                            <span class="activity-time">Hace 10 min</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon green"><i class="fa-solid fa-circle-check"></i></div>
+                        <div class="activity-info">
+                            <span class="activity-msg">Sistema operando al 100%</span>
+                            <span class="activity-time">Hace 15 min</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System status -->
+                <div class="system-status">
+                    <div class="status-header">Estado del Sistema</div>
+                    <div class="status-bars">
+                        <div class="status-bar-item">
+                            <span>API Gateway</span>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width: 98%; background: #10b981;"></div>
+                            </div>
+                            <span class="bar-pct">98%</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span>Base de Datos</span>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width: 100%; background: #10b981;"></div>
+                            </div>
+                            <span class="bar-pct">100%</span>
+                        </div>
+                        <div class="status-bar-item">
+                            <span>Auth Service</span>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width: 100%; background: #10b981;"></div>
+                            </div>
+                            <span class="bar-pct">100%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../assets/js/dashboard.js"></script>
+</body>
+</html>
