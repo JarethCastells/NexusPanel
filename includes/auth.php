@@ -15,7 +15,7 @@ function nombreRolActual(): string {
         'administrador' => 'Administrador',
         'operador' => 'Operador',
         'cliente' => 'Cliente',
-        'inventario', 'distribucion' => 'Inventario',
+        'inventario', 'distribucion' => 'Manager',
         default => ucfirst($rol),
     };
 }

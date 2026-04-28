@@ -3,9 +3,6 @@ require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireGestion();
 
-header('Location: productos.php');
-exit;
-
 $usuario = usuarioActual();
 $esAdmin = esAdmin();
 $esInventario = esInventario();
@@ -298,12 +295,6 @@ $movs = $pdo->query("
         </div>
         <div class="topbar-right">
             <div class="topbar-date" id="topbarDate"></div>
-            <a class="topbar-btn" href="productos.php" title="Productos">
-                <i class="fa-solid fa-pills"></i>
-            </a>
-            <a class="topbar-btn" href="mensajes.php" title="Mensajes">
-                <i class="fa-solid fa-comments"></i>
-            </a>
             <div class="dropdown">
                 <button class="topbar-btn" type="button" id="panelNotiBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Notificaciones">
                     <i class="fa-solid fa-bell"></i><span class="notif-count hidden" id="panelNotiCount">0</span>
@@ -333,14 +324,14 @@ $movs = $pdo->query("
                 </div>
                 <a class="btn-primary-custom" href="pedidos.php?estado=pendiente"><i class="fa-solid fa-clipboard-check"></i> Ver todos los pendientes</a>
             </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                <div style="padding:12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);">
-                    <div style="font-size:12px;color:var(--text-muted);">Pedidos pendientes</div>
-                    <div style="font-size:28px;font-weight:700;color:#f59e0b;"><?= (int)$pendientesCount ?></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+                <div style="padding:14px;border:1px solid rgba(245,158,11,.35);border-radius:14px;background:linear-gradient(135deg,rgba(245,158,11,.14),rgba(245,158,11,.04));box-shadow:0 12px 30px rgba(245,158,11,.08);">
+                    <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#fdba74;">Pedidos pendientes</div>
+                    <div style="font-size:32px;font-weight:800;color:#f59e0b;line-height:1.1;"><?= (int)$pendientesCount ?></div>
                 </div>
-                <div style="padding:12px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.02);">
-                    <div style="font-size:12px;color:var(--text-muted);">Productos en catalogo</div>
-                    <div style="font-size:28px;font-weight:700;color:var(--primary);"><?= (int)count($productos) ?></div>
+                <div style="padding:14px;border:1px solid rgba(0,212,255,.35);border-radius:14px;background:linear-gradient(135deg,rgba(0,212,255,.14),rgba(59,130,246,.06));box-shadow:0 12px 30px rgba(37,99,235,.10);">
+                    <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#67e8f9;">Productos en catalogo</div>
+                    <div style="font-size:32px;font-weight:800;color:var(--primary);line-height:1.1;"><?= (int)count($productos) ?></div>
                 </div>
             </div>
         </div>
@@ -352,14 +343,13 @@ $movs = $pdo->query("
             <?php else: ?>
                 <div class="table-wrapper">
                     <table class="data-table">
-                        <thead><tr><th>Pedido</th><th>Cliente</th><th>Items</th><th>Total</th><th>Fecha</th><th>Accion</th></tr></thead>
+                        <thead><tr><th>Pedido</th><th>Cliente</th><th>Items</th><th>Fecha</th><th>Accion</th></tr></thead>
                         <tbody>
                         <?php foreach ($pedidosPendientesInicio as $pp): ?>
                             <tr>
                                 <td>#<?= htmlspecialchars((string)($pp['folio_hex_ui'] ?: strtoupper(dechex((int)$pp['id'])))) ?></td>
                                 <td><?= htmlspecialchars((string)$pp['cliente_nombre']) ?></td>
                                 <td><?= (int)$pp['total_items'] ?></td>
-                                <td>$<?= number_format((float)$pp['total'], 2) ?></td>
                                 <td><?= htmlspecialchars((string)$pp['created_at']) ?></td>
                                 <td><a class="btn-secondary-custom" href="pedidos.php?historial=<?= (int)$pp['id'] ?>"><i class="fa-solid fa-eye"></i> Ver pedido</a></td>
                             </tr>
@@ -497,11 +487,11 @@ function renderPanelNotis(rows){
     const unseen = panelNotiCache.filter(r => !seen.has(String(r.uid || '')));
     badge.textContent = String(unseen.length);
     badge.classList.toggle('hidden', unseen.length < 1);
-    if (!panelNotiCache.length){
+    if (!unseen.length){
         list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px;">Sin notificaciones.</div>';
         return;
     }
-    list.innerHTML = panelNotiCache.map(r => `
+    list.innerHTML = unseen.map(r => `
         <a href="${safe(r.goto || '#')}" class="panel-noti-item" style="${seen.has(String(r.uid||'')) ? '' : 'border-color:rgba(0,212,255,.55);box-shadow:0 0 0 1px rgba(0,212,255,.18) inset;'}">
             <strong>${safe(r.title || 'Notificacion')}</strong>
             <small>${safe(r.from || 'Sistema')}</small>
@@ -553,6 +543,8 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
+
 
 
 

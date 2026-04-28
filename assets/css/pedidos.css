@@ -182,6 +182,118 @@
     .detalle-chat   { grid-column: 1; grid-row: auto; height: 300px; }
 }
 
+/* =============================================
+   HARDENED RESPONSIVE OVERRIDES
+   ============================================= */
+@media (max-width: 1024px) {
+    .pedidos-layout {
+        height: auto;
+        min-height: calc(100dvh - 64px);
+    }
+
+    .pedidos-lista {
+        width: 100%;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        overflow-y: visible;
+    }
+
+    .pedidos-lista-header {
+        position: static;
+    }
+
+    .pedido-item {
+        padding: 12px 14px;
+    }
+}
+
+@media (max-width: 768px) {
+    .stepper-wrap {
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding: 8px 6px 10px;
+        gap: 8px;
+    }
+
+    .stepper-line {
+        min-width: 56px;
+        margin: 0 2px 20px;
+    }
+
+    .detalle-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .detalle-info,
+    .detalle-mapa,
+    .detalle-chat {
+        width: 100%;
+    }
+
+    .detalle-chat {
+        height: 300px;
+    }
+
+    .chat-input-wrap {
+        padding: 10px;
+        gap: 6px;
+    }
+
+    .chat-input {
+        min-height: 40px;
+    }
+
+    .chat-send {
+        width: 40px;
+        height: 40px;
+    }
+
+    .mc-card {
+        height: auto;
+        min-height: 430px;
+    }
+
+    .mc-header {
+        padding: 10px 12px;
+    }
+
+    .mc-tabs {
+        width: 100%;
+    }
+
+    .mc-tab {
+        flex: 1;
+        justify-content: center;
+        min-height: 38px;
+    }
+}
+
+@media (max-width: 480px) {
+    .pedido-item-total {
+        font-size: 13px;
+    }
+
+    .detalle-item {
+        gap: 10px;
+        padding: 9px 0;
+    }
+
+    .di-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .mc-map-overlay {
+        font-size: 11px;
+        padding: 5px 10px;
+        max-width: calc(100% - 16px);
+    }
+}
+
 /* ══════════════════════════════════════════
    TARJETA MAPA + CHAT INTEGRADA (mc-card)
    Compartida por mis_pedidos y operador

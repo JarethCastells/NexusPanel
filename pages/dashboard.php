@@ -213,7 +213,7 @@ for ($d = 1; $d <= $diasMes; $d++) {
             <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                 <div>
                     <h3 class="panel-title">Resumen mensual administrativo</h3>
-                    <p class="panel-subtitle">Indicadores de usuarios, ventas, compras y stock.</p>
+                    <p class="panel-subtitle">Indicadores de usuarios, compras y stock.</p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                     <a href="pedidos.php" class="btn-panel"><i class="fa-solid fa-receipt"></i> Pedidos</a>
@@ -228,10 +228,6 @@ for ($d = 1; $d <= $diasMes; $d++) {
             <div class="stat-card" style="--card-accent: #00d4ff;">
                 <div class="stat-card-icon" style="background: rgba(0,212,255,0.1); color: #00d4ff;"><i class="fa-solid fa-user-plus"></i></div>
                 <div class="stat-card-data"><span class="stat-card-number"><?= $usuariosMes ?></span><span class="stat-card-label">Perfiles registrados este mes</span></div>
-            </div>
-            <div class="stat-card" style="--card-accent: #10b981;">
-                <div class="stat-card-icon" style="background: rgba(16,185,129,0.12); color: #10b981;"><i class="fa-solid fa-chart-line"></i></div>
-                <div class="stat-card-data"><span class="stat-card-number">$<?= number_format($ventasMes, 2) ?></span><span class="stat-card-label">Ventas realizadas este mes</span></div>
             </div>
             <div class="stat-card" style="--card-accent: #f59e0b;">
                 <div class="stat-card-icon" style="background: rgba(245,158,11,0.12); color: #f59e0b;"><i class="fa-solid fa-boxes-stacked"></i></div>
@@ -300,11 +296,11 @@ function renderPanelNotis(rows){
     const unseen = panelNotiCache.filter(r => !seen.has(String(r.uid || '')));
     badge.textContent = String(unseen.length);
     badge.classList.toggle('hidden', unseen.length < 1);
-    if (!panelNotiCache.length){
+    if (!unseen.length){
         list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px;">Sin notificaciones.</div>';
         return;
     }
-    list.innerHTML = panelNotiCache.map(r => `
+    list.innerHTML = unseen.map(r => `
         <a href="${safe(r.goto || '#')}" class="panel-noti-item" style="${seen.has(String(r.uid||'')) ? '' : 'border-color:rgba(0,212,255,.55);box-shadow:0 0 0 1px rgba(0,212,255,.18) inset;'}">
             <strong>${safe(r.title || 'Notificacion')}</strong>
             <small>${safe(r.from || 'Sistema')}</small>
@@ -340,6 +336,7 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
 
 
 

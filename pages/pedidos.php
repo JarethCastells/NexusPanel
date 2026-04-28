@@ -152,6 +152,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Pedido cancelado correctamente.';
         }
 
+        if ($action === 'resolver_cancelacion_solicitada') {
+            $solicitudId = (int)($_POST['solicitud_id'] ?? 0);
+            $decision = trim((string)($_POST['decision'] ?? ''));
+            $nota = trim((string)($_POST['nota'] ?? ''));
+            if ($solicitudId <= 0 || !in_array($decision, ['aprobar', 'rechazar'], true)) {
+                throw new RuntimeException('Solicitud invalida.');
+            }
+            if (!tableExists($pdo, 'pedido_cancelaciones')) {
+                throw new RuntimeException('No existe la tabla de solicitudes de cancelacion.');
+            }
+            $pdo->beginTransaction();
+            $stSol = $pdo->prepare("SELECT * FROM pedido_cancelaciones WHERE id=? FOR UPDATE");
+            $stSol->execute([$solicitudId]);
+            $sol = $stSol->fetch();
+            if (!$sol) {
+                throw new RuntimeException('Solicitud no encontrada.');
+            }
+            if (($sol['estado_solicitud'] ?? '') !== 'pendiente') {
+                throw new RuntimeException('La solicitud ya fue procesada.');
+            }
+            $estadoSol = $decision === 'aprobar' ? 'aprobada' : 'rechazada';
+            $pdo->prepare("UPDATE pedido_cancelaciones SET estado_solicitud=?, revisado_por=?, nota_revision=?, updated_at=NOW() WHERE id=?")
+                ->execute([$estadoSol, (int)$usuario['usuario_id'], mb_substr($nota, 0, 400), $solicitudId]);
+
+            if ($decision === 'aprobar') {
+                $stPed = $pdo->prepare("SELECT id, cliente_id, estado FROM pedidos WHERE id=? FOR UPDATE");
+                $stPed->execute([(int)$sol['pedido_id']]);
+                $ped = $stPed->fetch();
+                if (!$ped) throw new RuntimeException('Pedido no encontrado.');
+                if (($ped['estado'] ?? '') !== 'cancelado') {
+                    $pdo->prepare("UPDATE pedidos SET estado='cancelado', updated_at=NOW() WHERE id=?")->execute([(int)$sol['pedido_id']]);
+                    registrarHistorialPedido($pdo, (int)$sol['pedido_id'], 'cancelado', (int)$usuario['usuario_id'], 'Cancelado por solicitud (' . ($sol['solicitado_por'] ?? 'n/a') . ')');
+                    registrarNotificacionesEstandarPedido(
+                        $pdo,
+                        (int)$sol['pedido_id'],
+                        (int)$ped['cliente_id'],
+                        'pedido_cancelado',
+                        'Tu pedido fue cancelado tras revision de coordinacion.'
+                    );
+                }
+            } else {
+                registrarHistorialPedido($pdo, (int)$sol['pedido_id'], 'cancelacion_rechazada', (int)$usuario['usuario_id'], $nota !== '' ? $nota : 'Solicitud de cancelacion rechazada.');
+            }
+            $pdo->commit();
+            $msg = $decision === 'aprobar' ? 'Solicitud aprobada y pedido cancelado.' : 'Solicitud de cancelacion rechazada.';
+        }
+
         if ($action === 'programar') {
             $fechaProgramada = trim((string)($_POST['fecha_programada'] ?? ''));
             $fechaProgramada = $fechaProgramada !== '' ? str_replace('T', ' ', $fechaProgramada) . ':00' : null;
@@ -251,21 +298,70 @@ $sql = "
         c.lat AS cliente_lat,
         c.lng AS cliente_lng,
         o.nombre AS operador_nombre,
+        COALESCE(ev.evidencias_count, 0) AS evidencias_count,
         COUNT(pi.id) AS total_items,
         GROUP_CONCAT(CONCAT(pi.cantidad, 'x ', pr.nombre) ORDER BY pr.nombre SEPARATOR ' | ') AS resumen_productos
     FROM pedidos p
     JOIN usuarios c ON c.id = p.cliente_id
     LEFT JOIN usuarios o ON o.id = p.operador_id
+    LEFT JOIN (
+        SELECT pedido_id, COUNT(*) AS evidencias_count
+        FROM pedido_evidencias
+        GROUP BY pedido_id
+    ) ev ON ev.pedido_id = p.id
     LEFT JOIN pedido_items pi ON pi.pedido_id = p.id
     LEFT JOIN productos pr ON pr.id = pi.producto_id
     WHERE " . implode(' AND ', $where) . "
     GROUP BY p.id
-    ORDER BY p.created_at DESC
+    ORDER BY
+        CASE
+            WHEN p.estado = 'en_camino' THEN 0
+            WHEN p.estado = 'aceptado' THEN 1
+            WHEN p.estado = 'pendiente' THEN 2
+            WHEN p.estado = 'entregado' THEN 3
+            WHEN p.estado = 'cancelado' THEN 4
+            ELSE 5
+        END ASC,
+        p.updated_at DESC,
+        p.created_at DESC
     LIMIT 250
 ";
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $pedidos = $st->fetchAll();
+
+$cancelacionesPendientes = [];
+if (tableExists($pdo, 'pedido_cancelaciones')) {
+    $stCan = $pdo->query("
+        SELECT
+            pc.id,
+            pc.pedido_id,
+            pc.solicitado_por,
+            pc.motivo,
+            pc.created_at,
+            c.nombre AS cliente_nombre,
+            o.nombre AS operador_nombre
+        FROM pedido_cancelaciones pc
+        JOIN pedidos p ON p.id = pc.pedido_id
+        LEFT JOIN usuarios c ON c.id = p.cliente_id
+        LEFT JOIN usuarios o ON o.id = p.operador_id
+        WHERE pc.estado_solicitud = 'pendiente'
+        ORDER BY pc.id DESC
+        LIMIT 30
+    ");
+    $cancelacionesPendientes = $stCan->fetchAll();
+}
+
+$calificacionMap = [];
+if (tableExists($pdo, 'pedido_calificaciones') && !empty($pedidos)) {
+    $ids = array_map(static fn($x) => (int)$x['id'], $pedidos);
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stCalMap = $pdo->prepare("SELECT pedido_id, estrellas, comentario FROM pedido_calificaciones WHERE pedido_id IN ($placeholders)");
+    $stCalMap->execute($ids);
+    foreach ($stCalMap->fetchAll() as $rowCal) {
+        $calificacionMap[(int)$rowCal['pedido_id']] = $rowCal;
+    }
+}
 
 $clientes = $pdo->query("SELECT id, nombre FROM usuarios WHERE rol='cliente' AND activo=1 ORDER BY nombre ASC")->fetchAll();
 $transportes = $pdo->query("SELECT nombre FROM transporte_lineas WHERE activo=1 ORDER BY nombre ASC")->fetchAll();
@@ -597,10 +693,10 @@ foreach ($pedidos as $pp) {
             <div class="panel-header mb-2">
                 <div>
                     <h3 class="panel-title">Gestion de pedidos</h3>
-                    <p class="panel-subtitle">Programacion de entrega y asignacion operativa desde inventario.</p>
+                    <p class="panel-subtitle">Programacion de entrega y asignacion operativa desde manager.</p>
                 </div>
             </div>
-                        <p class="panel-subtitle" style="margin-bottom:10px;">Aqui puedes filtrar el pedido del cliente que quieres visualizar.</p>
+            <p class="panel-subtitle" style="margin-bottom:10px;">Aqui puedes filtrar el pedido del cliente que quieres visualizar.</p>
             <div class="toolbar-grid" id="pedidosToolbar">
                 <input class="modal-input" type="text" id="pedidoFilterQ" placeholder="Buscar" value="<?= htmlspecialchars($q) ?>">
                 <select class="modal-select" id="pedidoFilterEstado">
@@ -621,17 +717,37 @@ foreach ($pedidos as $pp) {
         </div>
 
         <div class="card-panel">
+            <?php if (!empty($cancelacionesPendientes)): ?>
+            <div style="padding:12px;border-bottom:1px solid var(--border);display:grid;gap:10px;">
+                <div class="panel-subtitle" style="margin:0;color:#fda4af;">Solicitudes de cancelacion pendientes</div>
+                <?php foreach ($cancelacionesPendientes as $sc): ?>
+                <form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px;border:1px solid rgba(239,68,68,.3);border-radius:10px;background:rgba(239,68,68,.08);">
+                    <input type="hidden" name="action" value="resolver_cancelacion_solicitada">
+                    <input type="hidden" name="solicitud_id" value="<?= (int)$sc['id'] ?>">
+                    <div style="font-size:12px;color:#fecaca;min-width:320px;">
+                        <strong>#<?= (int)$sc['pedido_id'] ?></strong> ·
+                        <?= $sc['solicitado_por'] === 'cliente' ? 'Cliente' : 'Operador' ?>:
+                        <?= htmlspecialchars((string)($sc['solicitado_por'] === 'cliente' ? $sc['cliente_nombre'] : $sc['operador_nombre'])) ?><br>
+                        Motivo: <?= htmlspecialchars((string)$sc['motivo']) ?>
+                    </div>
+                    <input class="modal-input" type="text" name="nota" placeholder="Nota de decision (opcional)" style="max-width:280px;">
+                    <button class="btn-primary-custom btn-table" type="submit" name="decision" value="aprobar">Aprobar y cancelar</button>
+                    <button class="btn-secondary-custom btn-table" type="submit" name="decision" value="rechazar">Rechazar</button>
+                </form>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
             <div class="table-wrapper">
                 <table class="data-table">
                     <thead>
                     <tr>
                         <th>Pedido</th>
                         <th>Fecha</th>
-                        <th>Productos</th>
+                        <th>Resumen productos</th>
                         <th>Cliente</th>
                         <th>Estatus</th>
                         <th>Operador</th>
-                        
+                        <th>Calificacion</th>
                         <th>Asignar</th>
                         <th>Estado</th>
                         <th>Historial</th>
@@ -640,9 +756,12 @@ foreach ($pedidos as $pp) {
                     <tbody>
                     <?php foreach ($pedidos as $p): ?>
                         <tr class="pedido-row">
-                            <td>#<?= htmlspecialchars($p['folio_hex'] ?: strtoupper(dechex((int)$p['id']))) ?><br><small><?= (int)$p['total_items'] ?> items</small></td>
+                            <td>
+                                <strong>#<?= htmlspecialchars($p['folio_hex'] ?: strtoupper(dechex((int)$p['id']))) ?></strong><br>
+                                <small style="color:var(--text-muted);"><?= (int)$p['total_items'] ?> unidad(es)</small>
+                            </td>
                             <td><?= htmlspecialchars($p['created_at']) ?></td>
-                            <td><small><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
+                            <td><small style="color:#d8e6ff;"><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
                             <td>
                                 <strong><?= htmlspecialchars($p['cliente_nombre']) ?></strong><br>
                                 <small><?= htmlspecialchars($p['cliente_email']) ?></small>
@@ -653,6 +772,17 @@ foreach ($pedidos as $pp) {
                                     <span class="operador-asignado"><i class="fa-solid fa-user-check"></i> <?= htmlspecialchars((string)$p['operador_nombre']) ?></span>
                                 <?php else: ?>
                                     <span style="color:var(--text-muted);font-size:12px;">Sin asignar</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <?php $cal = $calificacionMap[(int)$p['id']] ?? null; ?>
+                                <?php if ($cal): ?>
+                                    <span style="color:#fbbf24;font-weight:700;"><?= str_repeat('★', max(1, min(5, (int)$cal['estrellas']))) ?></span>
+                                    <?php if (!empty($cal['comentario'])): ?>
+                                    <div style="font-size:11px;color:var(--text-muted);max-width:180px;white-space:normal;"><?= htmlspecialchars((string)$cal['comentario']) ?></div>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span style="color:var(--text-muted);font-size:12px;">Sin calificar</span>
                                 <?php endif; ?>
                             </td>
 <td>
@@ -688,6 +818,11 @@ foreach ($pedidos as $pp) {
                                 <button type="button" class="btn-primary-custom btn-table btn-ver-pedido" data-pedido-id="<?= (int)$p['id'] ?>">
                                     <i class="fa-solid fa-route"></i> Ver pedido
                                 </button>
+                                <?php if ((int)($p['evidencias_count'] ?? 0) > 0): ?>
+                                <a href="pedidos.php?historial=<?= (int)$p['id'] ?>#detalle-historial" class="btn-secondary-custom btn-table" style="border-color:rgba(16,185,129,.45);color:#86efac;">
+                                    <i class="fa-solid fa-camera"></i> Fotos (<?= (int)$p['evidencias_count'] ?>)
+                                </a>
+                                <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -877,11 +1012,11 @@ function renderPanelNotis(rows){
     const unseen = panelNotiCache.filter(r => !seen.has(String(r.uid || '')));
     badge.textContent = String(unseen.length);
     badge.classList.toggle('hidden', unseen.length < 1);
-    if (!panelNotiCache.length){
+    if (!unseen.length){
         list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px;">Sin notificaciones.</div>';
         return;
     }
-    list.innerHTML = panelNotiCache.map(r => `
+    list.innerHTML = unseen.map(r => `
         <a href="${safe(r.goto || '#')}" class="panel-noti-item" style="${seen.has(String(r.uid||'')) ? '' : 'border-color:rgba(0,212,255,.55);box-shadow:0 0 0 1px rgba(0,212,255,.18) inset;'}">
             <strong>${safe(r.title || 'Notificacion')}</strong>
             <small>${safe(r.from || 'Sistema')}</small>
@@ -1110,6 +1245,7 @@ if (PEDIDO_ABRIR_ASIGNACION > 0) {
 </script>
 </body>
 </html>
+
 
 
 

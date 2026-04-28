@@ -168,11 +168,11 @@ function renderPanelNotis(rows){
     const unseen = panelNotiCache.filter(r => !seen.has(String(r.uid || '')));
     badge.textContent = String(unseen.length);
     badge.classList.toggle('hidden', unseen.length < 1);
-    if (!panelNotiCache.length){
+    if (!unseen.length){
         list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px;">Sin notificaciones.</div>';
         return;
     }
-    list.innerHTML = panelNotiCache.map(r => `
+    list.innerHTML = unseen.map(r => `
         <a href="${safe(r.goto || '#')}" class="panel-noti-item" style="${seen.has(String(r.uid||'')) ? '' : 'border-color:rgba(0,212,255,.55);box-shadow:0 0 0 1px rgba(0,212,255,.18) inset;'}">
             <strong>${safe(r.title || 'Notificacion')}</strong>
             <small>${safe(r.from || 'Sistema')}</small>
@@ -293,6 +293,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 
@@ -115,6 +115,11 @@ switch ($action) {
         ]);
 
     case 'chat_get':
+        if (!usuarioPuedeVerPedido($pdo, $pedidoId, $u)) jsonResponse(['error' => 'Sin permiso'], 403);
+        $stChatPedido = $pdo->prepare("SELECT estado FROM pedidos WHERE id = ? LIMIT 1");
+        $stChatPedido->execute([$pedidoId]);
+        $chatPedido = $stChatPedido->fetch();
+        if (!$chatPedido || (string)$chatPedido['estado'] !== 'en_camino') jsonResponse([]);
         $desde = (int)($_GET['desde'] ?? 0);
         $msgs = $pdo->prepare("
             SELECT c.id, c.mensaje, c.ts, u.nombre, u.rol
@@ -126,12 +131,145 @@ switch ($action) {
         jsonResponse($msgs->fetchAll());
 
     case 'chat_send':
+        if (!usuarioPuedeVerPedido($pdo, $pedidoId, $u)) jsonResponse(['error' => 'Sin permiso'], 403);
+        $stChatPedido = $pdo->prepare("SELECT estado FROM pedidos WHERE id = ? LIMIT 1");
+        $stChatPedido->execute([$pedidoId]);
+        $chatPedido = $stChatPedido->fetch();
+        if (!$chatPedido || (string)$chatPedido['estado'] !== 'en_camino') jsonResponse(['error' => 'El chat solo esta disponible cuando el pedido esta en camino'], 409);
         $body = json_decode(file_get_contents('php://input'), true);
         $mensaje = trim($body['mensaje'] ?? '');
         if (!$mensaje) jsonResponse(['error' => 'Mensaje vacio'], 400);
         $pdo->prepare("INSERT INTO chat (pedido_id,usuario_id,mensaje) VALUES (?,?,?)")
             ->execute([$pedidoId, $u['usuario_id'], $mensaje]);
         jsonResponse(['success' => true, 'id' => $pdo->lastInsertId()]);
+
+    case 'solicitar_cancelacion':
+        if (!esOperador() && !esCliente()) jsonResponse(['error' => 'Sin permiso'], 403);
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') jsonResponse(['error' => 'Metodo no permitido'], 405);
+        if ($pedidoId <= 0) jsonResponse(['error' => 'Pedido invalido'], 422);
+
+        $body = json_decode(file_get_contents('php://input'), true);
+        $motivo = trim((string)($body['motivo'] ?? ''));
+        if ($motivo === '') jsonResponse(['error' => 'Debes indicar el motivo'], 422);
+
+        $stPed = $pdo->prepare("SELECT id, cliente_id, operador_id, estado FROM pedidos WHERE id = ? LIMIT 1");
+        $stPed->execute([$pedidoId]);
+        $ped = $stPed->fetch();
+        if (!$ped) jsonResponse(['error' => 'Pedido no encontrado'], 404);
+
+        $uid = (int)($u['usuario_id'] ?? 0);
+        $esPropioCliente = esCliente() && $uid === (int)$ped['cliente_id'];
+        $esPropioOperador = esOperador() && $uid === (int)$ped['operador_id'];
+        if (!$esPropioCliente && !$esPropioOperador) jsonResponse(['error' => 'Sin permiso sobre este pedido'], 403);
+        if (in_array((string)$ped['estado'], ['entregado', 'cancelado'], true)) {
+            jsonResponse(['error' => 'Este pedido ya no se puede cancelar'], 409);
+        }
+
+        asegurarTablaCancelacionesPedido($pdo);
+        $tipoSolicitante = esCliente() ? 'cliente' : 'operador';
+        $ins = $pdo->prepare("
+            INSERT INTO pedido_cancelaciones (pedido_id, solicitado_por, solicitante_id, motivo, estado_solicitud, created_at, updated_at)
+            VALUES (?, ?, ?, ?, 'pendiente', NOW(), NOW())
+        ");
+        $ins->execute([$pedidoId, $tipoSolicitante, $uid, mb_substr($motivo, 0, 400)]);
+        registrarHistorialPedido($pdo, $pedidoId, 'solicitud_cancelacion', $uid, 'Solicitud de cancelacion: ' . mb_substr($motivo, 0, 250));
+        jsonResponse(['success' => true, 'id' => (int)$pdo->lastInsertId()]);
+
+    case 'resolver_solicitud_cancelacion':
+        if (!esAdmin() && !esInventario()) jsonResponse(['error' => 'Sin permiso'], 403);
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') jsonResponse(['error' => 'Metodo no permitido'], 405);
+        $body = json_decode(file_get_contents('php://input'), true);
+        $solicitudId = (int)($body['solicitud_id'] ?? 0);
+        $decision = trim((string)($body['decision'] ?? ''));
+        $nota = trim((string)($body['nota'] ?? ''));
+        if ($solicitudId <= 0 || !in_array($decision, ['aprobar', 'rechazar'], true)) {
+            jsonResponse(['error' => 'Solicitud o decision invalida'], 422);
+        }
+
+        asegurarTablaCancelacionesPedido($pdo);
+        $pdo->beginTransaction();
+        try {
+            $stSol = $pdo->prepare("
+                SELECT id, pedido_id, solicitado_por, solicitante_id, motivo, estado_solicitud
+                FROM pedido_cancelaciones
+                WHERE id = ?
+                FOR UPDATE
+            ");
+            $stSol->execute([$solicitudId]);
+            $sol = $stSol->fetch();
+            if (!$sol) throw new RuntimeException('Solicitud no encontrada');
+            if ((string)$sol['estado_solicitud'] !== 'pendiente') throw new RuntimeException('La solicitud ya fue procesada');
+
+            $nuevoEstadoSol = $decision === 'aprobar' ? 'aprobada' : 'rechazada';
+            $pdo->prepare("
+                UPDATE pedido_cancelaciones
+                SET estado_solicitud = ?, revisado_por = ?, nota_revision = ?, updated_at = NOW()
+                WHERE id = ?
+            ")->execute([$nuevoEstadoSol, (int)$u['usuario_id'], mb_substr($nota, 0, 400), $solicitudId]);
+
+            if ($decision === 'aprobar') {
+                $stPed = $pdo->prepare("SELECT id, cliente_id, estado FROM pedidos WHERE id = ? FOR UPDATE");
+                $stPed->execute([(int)$sol['pedido_id']]);
+                $ped = $stPed->fetch();
+                if (!$ped) throw new RuntimeException('Pedido no encontrado');
+
+                $pedidoEliminarId = (int)$sol['pedido_id'];
+                $tablasRelacionadas = [
+                    'tracking',
+                    'chat',
+                    'pedido_items',
+                    'pedido_historial_estados',
+                    'pedido_cancelaciones',
+                    'pedido_calificaciones',
+                    'pedido_evidencias',
+                    'notificaciones_eventos',
+                ];
+                foreach ($tablasRelacionadas as $tabla) {
+                    if (!tableExists($pdo, $tabla) || !columnExists($pdo, $tabla, 'pedido_id')) continue;
+                    $pdo->prepare("DELETE FROM {$tabla} WHERE pedido_id = ?")->execute([$pedidoEliminarId]);
+                }
+
+                $pdo->prepare("DELETE FROM pedidos WHERE id = ?")->execute([$pedidoEliminarId]);
+            } else {
+                registrarHistorialPedido($pdo, (int)$sol['pedido_id'], 'cancelacion_rechazada', (int)$u['usuario_id'], $nota !== '' ? $nota : 'Solicitud rechazada por coordinacion');
+            }
+            $pdo->commit();
+            jsonResponse(['success' => true]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            jsonResponse(['error' => $e->getMessage()], 409);
+        }
+
+    case 'calificar_entrega':
+        if (!esCliente()) jsonResponse(['error' => 'Sin permiso'], 403);
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') jsonResponse(['error' => 'Metodo no permitido'], 405);
+        if ($pedidoId <= 0) jsonResponse(['error' => 'Pedido invalido'], 422);
+        $body = json_decode(file_get_contents('php://input'), true);
+        $estrellas = (int)($body['estrellas'] ?? 0);
+        $comentario = trim((string)($body['comentario'] ?? ''));
+        if ($estrellas < 1 || $estrellas > 5) jsonResponse(['error' => 'La calificacion debe ser de 1 a 5 estrellas'], 422);
+
+        $stPed = $pdo->prepare("SELECT id, cliente_id, estado FROM pedidos WHERE id = ? LIMIT 1");
+        $stPed->execute([$pedidoId]);
+        $ped = $stPed->fetch();
+        if (!$ped) jsonResponse(['error' => 'Pedido no encontrado'], 404);
+        if ((int)$ped['cliente_id'] !== (int)$u['usuario_id']) jsonResponse(['error' => 'Sin permiso sobre este pedido'], 403);
+        if ((string)$ped['estado'] !== 'entregado') jsonResponse(['error' => 'Solo puedes calificar pedidos entregados'], 409);
+
+        asegurarTablaCalificacionesPedido($pdo);
+        $stExiste = $pdo->prepare("SELECT id FROM pedido_calificaciones WHERE pedido_id = ? AND cliente_id = ? LIMIT 1");
+        $stExiste->execute([$pedidoId, (int)$u['usuario_id']]);
+        if ($stExiste->fetch()) {
+            jsonResponse(['error' => 'Este pedido ya fue calificado y no se puede editar.'], 409);
+        }
+
+        $stUp = $pdo->prepare("
+            INSERT INTO pedido_calificaciones (pedido_id, cliente_id, estrellas, comentario, created_at, updated_at)
+            VALUES (?, ?, ?, ?, NOW(), NOW())
+        ");
+        $stUp->execute([$pedidoId, (int)$u['usuario_id'], $estrellas, mb_substr($comentario, 0, 400)]);
+        registrarHistorialPedido($pdo, $pedidoId, 'calificado', (int)$u['usuario_id'], 'Cliente califico con ' . $estrellas . ' estrella(s)');
+        jsonResponse(['success' => true]);
 
     case 'update_tracking':
         if (!esOperador() && !esAdmin()) jsonResponse(['error' => 'Sin permiso'], 403);
@@ -305,6 +443,7 @@ switch ($action) {
                     p.cliente_id,
                     p.folio_hex,
                     p.lat_entrega,
+                    p.operador_id,
                     p.lng_entrega,
                     u.telefono,
                     u.nombre AS cli_nombre,
@@ -341,7 +480,7 @@ switch ($action) {
                 }
 
                 $distKm = haversine($opLat, $opLng, $cliLat, $cliLng);
-                if ($distKm > 0.3) {
+                if ($distKm > 0.3 && !isLocalDevRequest()) {
                     throw new RuntimeException('Aun no estas a menos de 300 metros del cliente. Acercate para habilitar la entrega.');
                 }
             }
@@ -374,6 +513,39 @@ switch ($action) {
                 $stmtEv->execute([$pedidoId, $path]);
             }
 
+            // Auto-flujo operador: al entregar, activar automaticamente el siguiente pedido aceptado.
+            $operadorFlujoId = esOperador() ? (int)$u['usuario_id'] : (int)($pedBase['operador_id'] ?? 0);
+            if ($operadorFlujoId > 0) {
+                $stNext = $pdo->prepare("
+                    SELECT id, cliente_id
+                    FROM pedidos
+                    WHERE operador_id = ?
+                      AND estado = 'aceptado'
+                      AND id <> ?
+                    ORDER BY updated_at ASC, id ASC
+                    LIMIT 1
+                    FOR UPDATE
+                ");
+                $stNext->execute([$operadorFlujoId, $pedidoId]);
+                $nextPedido = $stNext->fetch();
+                if ($nextPedido) {
+                    $updNext = $pdo->prepare("UPDATE pedidos SET estado='en_camino', updated_at=NOW() WHERE id=? AND estado='aceptado'");
+                    $updNext->execute([(int)$nextPedido['id']]);
+                    if ($updNext->rowCount() > 0) {
+                        $pdo->prepare("INSERT INTO chat (pedido_id,usuario_id,mensaje) VALUES (?,?,?)")
+                            ->execute([(int)$nextPedido['id'], $operadorFlujoId, 'Ya voy en camino. Puedes ver mi ubicacion en tiempo real en el mapa.']);
+                        registrarHistorialPedido($pdo, (int)$nextPedido['id'], 'en_camino', (int)$u['usuario_id'], 'Viaje iniciado automaticamente tras entrega previa');
+                        registrarNotificacionesEstandarPedido(
+                            $pdo,
+                            (int)$nextPedido['id'],
+                            (int)$nextPedido['cliente_id'],
+                            'pedido_en_camino',
+                            'Tu pedido salio a ruta y va en camino.'
+                        );
+                    }
+                }
+            }
+
             $pdo->commit();
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
@@ -381,7 +553,7 @@ switch ($action) {
         }
         
         $folio = $pedBase['folio_hex'] ?: strtoupper(dechex($pedidoId));
-        $msj_wa = "Hola {$pedBase['cli_nombre']},\nte informamos que tu pedido con folio #{$folio} ha sido entregado exitosamente a: *{$personaRecibe}*.\nEstado del paquete: {$estadoPaquete}.\n\n¡Gracias por tu preferencia!";
+        $msj_wa = "Hola {$pedBase['cli_nombre']},\nte informamos que tu pedido con folio #{$folio} ha sido entregado exitosamente a: *{$personaRecibe}*.\nEstado del paquete: {$estadoPaquete}.\n\nÂ¡Gracias por tu preferencia!";
 
         jsonResponse([
             'success' => true,
@@ -478,6 +650,61 @@ switch ($action) {
         $hasSinProductosAt = columnExists($pdo, 'pedidos', 'sin_productos_at');
         $sinProductosExpr = $hasSinProductos ? "IFNULL(p.operador_sin_productos,0)" : "0";
         $sinProductosAtExpr = $hasSinProductosAt ? "p.sin_productos_at" : "NULL";
+
+        // Autocorreccion operativa:
+        // Si el operador tiene pedidos aceptados pero ninguno en camino,
+        // promovemos automaticamente el siguiente aceptado a en_camino.
+        if (esOperador() && $uid > 0) {
+            try {
+                $pdo->beginTransaction();
+                $stLock = $pdo->prepare("
+                    SELECT
+                        SUM(CASE WHEN estado='en_camino' THEN 1 ELSE 0 END) AS en_camino_count,
+                        SUM(CASE WHEN estado='aceptado' THEN 1 ELSE 0 END) AS aceptado_count
+                    FROM pedidos
+                    WHERE operador_id = ?
+                    FOR UPDATE
+                ");
+                $stLock->execute([$uid]);
+                $counts = $stLock->fetch() ?: ['en_camino_count' => 0, 'aceptado_count' => 0];
+                $enCaminoCount = (int)($counts['en_camino_count'] ?? 0);
+                $aceptadoCount = (int)($counts['aceptado_count'] ?? 0);
+
+                if ($enCaminoCount < 1 && $aceptadoCount > 0) {
+                    $stNext = $pdo->prepare("
+                        SELECT id, cliente_id
+                        FROM pedidos
+                        WHERE operador_id = ?
+                          AND estado = 'aceptado'
+                        ORDER BY updated_at ASC, id ASC
+                        LIMIT 1
+                        FOR UPDATE
+                    ");
+                    $stNext->execute([$uid]);
+                    $nextPedido = $stNext->fetch();
+                    if ($nextPedido) {
+                        $updNext = $pdo->prepare("UPDATE pedidos SET estado='en_camino', updated_at=NOW() WHERE id=? AND estado='aceptado'");
+                        $updNext->execute([(int)$nextPedido['id']]);
+                        if ($updNext->rowCount() > 0) {
+                            $pdo->prepare("INSERT INTO chat (pedido_id,usuario_id,mensaje) VALUES (?,?,?)")
+                                ->execute([(int)$nextPedido['id'], $uid, 'Ya voy en camino. Puedes ver mi ubicacion en tiempo real en el mapa.']);
+                            registrarHistorialPedido($pdo, (int)$nextPedido['id'], 'en_camino', $uid, 'Viaje iniciado automaticamente por autocorreccion operativa');
+                            registrarNotificacionesEstandarPedido(
+                                $pdo,
+                                (int)$nextPedido['id'],
+                                (int)$nextPedido['cliente_id'],
+                                'pedido_en_camino',
+                                'Tu pedido salio a ruta y va en camino.'
+                            );
+                        }
+                    }
+                }
+                $pdo->commit();
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
+            }
+        }
+
         $where = "p.estado IN ('aceptado','en_camino')";
         $params = [];
         if (esOperador()) {
@@ -572,7 +799,7 @@ switch ($action) {
             JOIN usuarios su ON su.id = c.usuario_id
             WHERE p.operador_id = ?
               AND su.rol = 'cliente'
-              AND p.estado IN ('aceptado','en_camino')
+              AND p.estado = 'en_camino'
             ORDER BY c.id DESC
             LIMIT {$limit}
         ");
@@ -610,7 +837,7 @@ switch ($action) {
         ");
         $chatAyudaSt->execute([$uid, $uid]);
         foreach ($chatAyudaSt->fetchAll() as $r) {
-            $rolTxt = ((string)$r['remitente_rol'] === 'inventario') ? 'Inventario' : 'Admin';
+            $rolTxt = ((string)$r['remitente_rol'] === 'inventario') ? 'Manager' : 'Admin';
             $out[] = [
                 'uid' => 'ayuda:' . (int)$r['source_id'],
                 'source' => 'ayuda',
@@ -658,10 +885,91 @@ switch ($action) {
                 'uid' => 'pendiente:' . $pedidoId,
                 'ts' => (string)$r['created_at'],
                 'title' => 'Pedido pendiente #' . (string)($r['folio_hex'] ?: strtoupper(dechex($pedidoId))),
-                'body' => 'Cliente: ' . (string)$r['cliente_nombre'] . ' · Total: $' . number_format((float)$r['total'], 2),
+                'body' => 'Cliente: ' . (string)$r['cliente_nombre'],
                 'from' => 'Sistema',
                 'goto' => 'pedidos.php?historial=' . $pedidoId . '#detalle-historial'
             ];
+        }
+
+        if (tableExists($pdo, 'pedido_historial_estados')) {
+            $stHistNoti = $pdo->prepare("
+                SELECT
+                    h.id,
+                    h.pedido_id,
+                    h.estado,
+                    h.nota,
+                    h.created_at,
+                    {$folioExpr} AS folio_hex,
+                    c.nombre AS cliente_nombre,
+                    o.nombre AS operador_nombre
+                FROM pedido_historial_estados h
+                JOIN pedidos p ON p.id = h.pedido_id
+                LEFT JOIN usuarios c ON c.id = p.cliente_id
+                LEFT JOIN usuarios o ON o.id = p.operador_id
+                WHERE h.estado IN ('aceptado', 'en_camino', 'entregado', 'cancelado', 'calificado')
+                ORDER BY h.id DESC
+                LIMIT {$limit}
+            ");
+            $stHistNoti->execute();
+            foreach ($stHistNoti->fetchAll() as $r) {
+                $pedidoId = (int)$r['pedido_id'];
+                $estado = (string)$r['estado'];
+                $tituloEstado = match ($estado) {
+                    'aceptado' => 'Pedido aceptado',
+                    'en_camino' => 'Pedido en camino',
+                    'entregado' => 'Pedido entregado',
+                    'cancelado' => 'Pedido cancelado',
+                    'calificado' => 'Pedido calificado',
+                    default => 'Actualizacion de pedido',
+                };
+                $bodyEstado = 'Cliente: ' . (string)($r['cliente_nombre'] ?? 'Cliente');
+                if (!empty($r['operador_nombre'])) {
+                    $bodyEstado .= ' · Operador: ' . (string)$r['operador_nombre'];
+                }
+                if (!empty($r['nota'])) {
+                    $bodyEstado .= ' · ' . mb_substr((string)$r['nota'], 0, 140);
+                }
+                $out[] = [
+                    'uid' => 'hist:' . (int)$r['id'],
+                    'ts' => (string)$r['created_at'],
+                    'title' => $tituloEstado . ' #' . (string)($r['folio_hex'] ?: strtoupper(dechex($pedidoId))),
+                    'body' => $bodyEstado,
+                    'from' => 'Sistema',
+                    'goto' => 'pedidos.php?historial=' . $pedidoId . '#detalle-historial'
+                ];
+            }
+        }
+
+        if (tableExists($pdo, 'pedido_calificaciones')) {
+            $stCalNoti = $pdo->prepare("
+                SELECT
+                    pc.id,
+                    pc.pedido_id,
+                    pc.estrellas,
+                    pc.comentario,
+                    pc.created_at,
+                    {$folioExpr} AS folio_hex,
+                    c.nombre AS cliente_nombre
+                FROM pedido_calificaciones pc
+                JOIN pedidos p ON p.id = pc.pedido_id
+                LEFT JOIN usuarios c ON c.id = p.cliente_id
+                ORDER BY pc.id DESC
+                LIMIT {$limit}
+            ");
+            $stCalNoti->execute();
+            foreach ($stCalNoti->fetchAll() as $r) {
+                $pedidoId = (int)$r['pedido_id'];
+                $estrellas = max(1, min(5, (int)($r['estrellas'] ?? 0)));
+                $comentario = trim((string)($r['comentario'] ?? ''));
+                $out[] = [
+                    'uid' => 'rating:' . (int)$r['id'],
+                    'ts' => (string)$r['created_at'],
+                    'title' => 'Nueva calificacion #' . (string)($r['folio_hex'] ?: strtoupper(dechex($pedidoId))),
+                    'body' => 'Cliente: ' . (string)($r['cliente_nombre'] ?? 'Cliente') . ' · ' . str_repeat('★', $estrellas) . ($comentario !== '' ? (' · ' . mb_substr($comentario, 0, 120)) : ''),
+                    'from' => 'Cliente',
+                    'goto' => 'pedidos.php?historial=' . $pedidoId . '#detalle-historial'
+                ];
+            }
         }
 
         if (tableExists($pdo, 'chat_ayuda_operador')) {
@@ -705,7 +1013,7 @@ switch ($action) {
         $limit = (int)($_GET['limit'] ?? 100);
         $limit = max(1, min($limit, 300));
 
-        $where = "p.estado IN ('aceptado','en_camino') AND su.rol = 'cliente'";
+        $where = "p.estado = 'en_camino' AND su.rol = 'cliente'";
         $params = [];
         if (esOperador()) {
             $where .= " AND p.operador_id = ?";
@@ -1242,6 +1550,56 @@ function usuarioPuedeVerPedido(PDO $pdo, int $pedidoId, array $u): bool {
     return $uid === (int)$pedido['cliente_id'] || $uid === (int)$pedido['operador_id'];
 }
 
+function asegurarTablaCancelacionesPedido(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS pedido_cancelaciones (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            pedido_id INT NOT NULL,
+            solicitado_por ENUM('cliente','operador') NOT NULL,
+            solicitante_id INT NOT NULL,
+            motivo VARCHAR(400) NOT NULL,
+            estado_solicitud ENUM('pendiente','aprobada','rechazada') NOT NULL DEFAULT 'pendiente',
+            revisado_por INT NULL,
+            nota_revision VARCHAR(400) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_cancelaciones_pedido (pedido_id),
+            INDEX idx_cancelaciones_estado (estado_solicitud),
+            FOREIGN KEY (pedido_id) REFERENCES pedidos(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $ready = true;
+}
+
+function asegurarTablaCalificacionesPedido(PDO $pdo): void {
+    static $ready = false;
+    if ($ready) return;
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS pedido_calificaciones (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            pedido_id INT NOT NULL,
+            cliente_id INT NOT NULL,
+            estrellas TINYINT NOT NULL,
+            comentario VARCHAR(400) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_calif_pedido_cliente (pedido_id, cliente_id),
+            INDEX idx_calif_pedido (pedido_id),
+            FOREIGN KEY (pedido_id) REFERENCES pedidos(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+    $ready = true;
+}
+
+function isLocalDevRequest(): bool {
+    $host = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? '')));
+    if ($host === '') return false;
+    $host = preg_replace('/:\d+$/', '', $host);
+    return in_array($host, ['localhost', '127.0.0.1', '::1'], true);
+}
+
 function asegurarTablaChatAyudaOperador(PDO $pdo): void {
     static $ready = false;
     if ($ready) return;
@@ -1430,3 +1788,6 @@ function base64UrlDecode(string $value): ?string {
     $decoded = base64_decode(strtr($value, '-_', '+/'), true);
     return $decoded === false ? null : $decoded;
 }
+
+
+

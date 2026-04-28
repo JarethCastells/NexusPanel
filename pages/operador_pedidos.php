@@ -49,7 +49,7 @@ $mensajesInicio = $pdo->prepare("
     JOIN pedidos p ON p.id = c.pedido_id
     JOIN usuarios ru ON ru.id = c.usuario_id
     WHERE p.operador_id = ?
-      AND p.estado IN ('aceptado','en_camino')
+      AND p.estado = 'en_camino'
       AND ru.rol = 'cliente'
     ORDER BY c.id DESC
     LIMIT 80
@@ -272,6 +272,13 @@ if (!empty($allIds)) {
     }
     .notif-count.hidden { display: none; }
     .op-noti-dropdown { width: 360px; max-width: calc(100vw - 24px); border: 1px solid var(--border); background: #0b1528; z-index: 8000 !important; }
+    .topbar { position: relative; z-index: 12000 !important; }
+    .topbar .dropdown-menu { z-index: 13000 !important; }
+    .delivery-map,
+    #mapaOperador,
+    .leaflet-container,
+    .leaflet-pane,
+    .leaflet-control-container { z-index: 1 !important; }
     .op-noti-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; color:#fff; }
     .op-noti-list { max-height: 320px; overflow: auto; padding: 8px; display: grid; gap: 8px; }
     .op-noti-item { display:block; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.02); color:inherit; text-decoration:none; padding:10px; }
@@ -468,6 +475,50 @@ if (!empty($allIds)) {
         font-weight: 600;
     }
     .dbar-more { color: #00d4ff; border-color: rgba(0,212,255,0.2); background: rgba(0,212,255,0.06); }
+    .btn-view-order {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(0,212,255,.35);
+        background: rgba(0,212,255,.12);
+        color: #7dd3fc;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .btn-view-order:hover { background: rgba(0,212,255,.2); color: #e0f2fe; }
+    .order-detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+    }
+    .order-detail-card {
+        border: 1px solid rgba(148,163,184,.25);
+        background: rgba(15,23,42,.7);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .order-detail-thumb {
+        width: 100%;
+        height: 170px;
+        background: #0b1220;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .order-detail-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        cursor: zoom-in;
+    }
+    .order-detail-fallback { color: #64748b; font-size: 28px; }
+    .order-detail-body { padding: 10px 12px; }
+    .order-detail-name { color: #e2e8f0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+    .order-detail-meta { color: #93c5fd; font-size: 12px; margin-top: 4px; }
 
     /* Botones de acciÃƒÂ³n */
     .dbar-actions { display: flex; flex-direction: column; gap: 10px; }
@@ -1245,7 +1296,7 @@ if (!empty($allIds)) {
             <div class="card-panel" style="margin:12px;">
                 <div class="panel-header">
                     <div>
-                        <h3 class="panel-title">Ayuda con Admin / Inventario</h3>
+                        <h3 class="panel-title">Ayuda con Admin / Manager</h3>
                         <p class="panel-subtitle">Canal directo para soporte operativo del viaje.</p>
                     </div>
                 </div>
@@ -1309,7 +1360,7 @@ if (!empty($allIds)) {
             <div style="text-align:center;padding:60px;color:var(--text-muted);">
                 <i class="fa-solid fa-truck" style="font-size:50px;opacity:0.15;display:block;margin-bottom:16px;"></i>
                 <p>No tienes entregas activas en este momento.</p>
-                <p style="font-size:13px;margin-top:8px;">Cuando inventario te asigne una entrega aparecera aqui automaticamente.</p>
+                <p style="font-size:13px;margin-top:8px;">Cuando manager te asigne una entrega aparecera aqui automaticamente.</p>
             </div>
             <?php else: ?>
             <div class="activos-layout">
@@ -1354,10 +1405,12 @@ if (!empty($allIds)) {
                         </div>
 
                         <!-- FAB Chat -->
+                        <?php if (($pedidoActivo['estado'] ?? '') === 'en_camino'): ?>
                         <button class="chat-fab" onclick="toggleChatModal()">
                             <i class="fa-solid fa-comments"></i>
                             <span class="fab-badge hidden" id="chatBadge"></span>
                         </button>
+                        <?php endif; ?>
                     </div>
 
                     <!-- BARRA INFERIOR: info + botones -->
@@ -1386,7 +1439,7 @@ if (!empty($allIds)) {
                         <div class="dbar-products">
                             <?php foreach (array_slice($itemsPedido,0,3) as $item): ?>
                             <?php $prodImg = !empty($item['imagen']) ? ('../uploads/productos/' . $item['imagen']) : ''; ?>
-                            <span class="dbar-pill dbar-pill-product">
+                            <span class="dbar-pill dbar-pill-product" role="button" onclick="abrirDetallePedidoActual()" title="Ver detalle del pedido">
                                 <?php if ($prodImg !== ''): ?>
                                 <img src="<?= htmlspecialchars($prodImg) ?>" class="dbar-pill-thumb" alt="<?= htmlspecialchars($item['nombre']) ?>" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
                                 <?php endif; ?>
@@ -1395,8 +1448,11 @@ if (!empty($allIds)) {
                             </span>
                             <?php endforeach; ?>
                             <?php if (count($itemsPedido) > 3): ?>
-                            <span class="dbar-pill dbar-more">+<?= count($itemsPedido)-3 ?> mas</span>
+                            <span class="dbar-pill dbar-more" role="button" onclick="abrirDetallePedidoActual()" title="Ver todos los productos">+<?= count($itemsPedido)-3 ?> mas</span>
                             <?php endif; ?>
+                            <button type="button" class="btn-view-order" onclick="abrirDetallePedidoActual()">
+                                <i class="fa-solid fa-eye"></i> Ver pedido
+                            </button>
                         </div>
 
                         <!-- Botones de acciÃƒÂ³n -->
@@ -1416,14 +1472,14 @@ if (!empty($allIds)) {
                                 <i class="fa-solid fa-camera"></i>
                                 Entrega habilitada al estar cerca
                             </button>
-                            <button class="dbar-btn dbar-btn-warning-tech" onclick="marcarSinProductos(<?= (int)$pedidoActivo['id'] ?>)">
-                                <i class="fa-solid fa-triangle-exclamation"></i>
-                                No tengo productos
+                            <button class="dbar-btn" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;" onclick="solicitarCancelacionOperador(<?= (int)$pedidoActivo['id'] ?>)">
+                                <i class="fa-solid fa-ban"></i>
+                                Solicitar cancelacion
                             </button>
                         </div>
 
                         <div id="geoEntregaNotice" style="display:none;width:100%;margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid rgba(16,185,129,.45);background:rgba(16,185,129,.12);color:#a7f3d0;font-weight:700;align-items:center;justify-content:space-between;gap:10px;">
-                            <span><i class="fa-solid fa-location-check"></i> Puedes entregar este pedido Â· <span id="geoEntregaPhone"></span></span>
+                            <span><i class="fa-solid fa-location-check"></i> Puedes entregar este pedido · <span id="geoEntregaPhone"></span></span>
                             <button type="button" class="btn-primary-custom" style="padding:8px 12px;" onclick="abrirModalEntrega()">Subir evidencias</button>
                         </div>
                         <div id="geoEntregaHint" style="width:100%;margin-top:8px;color:var(--text-muted);font-size:12px;">
@@ -1467,7 +1523,38 @@ if (!empty($allIds)) {
                         </div>
                     </div>
 
+                    <!-- MODAL DETALLE PEDIDO ACTUAL -->
+                    <div class="entrega-overlay" id="detallePedidoActualModal">
+                        <div class="entrega-modal" style="max-width:980px;">
+                            <div class="em-title">Detalle del pedido #<?= htmlspecialchars((string)($pedidoActivo['folio_hex'] ?: strtoupper(dechex((int)$pedidoActivo['id'])))) ?></div>
+                            <div class="em-subtitle">Cliente: <?= htmlspecialchars((string)$pedidoActivo['cli_nombre']) ?> · <?= count($itemsPedido) ?> producto(s)</div>
+                            <div class="order-detail-grid" style="margin-top:12px;">
+                                <?php foreach ($itemsPedido as $itd): ?>
+                                <?php $imgDet = !empty($itd['imagen']) ? ('../uploads/productos/' . $itd['imagen']) : ''; ?>
+                                <div class="order-detail-card">
+                                    <div class="order-detail-thumb">
+                                        <?php if ($imgDet !== ''): ?>
+                                        <img src="<?= htmlspecialchars($imgDet) ?>" alt="<?= htmlspecialchars((string)$itd['nombre']) ?>" loading="lazy" onclick="abrirFotoFullscreen('<?= htmlspecialchars($imgDet, ENT_QUOTES) ?>')">
+                                        <?php else: ?>
+                                        <i class="fa-solid fa-box-open order-detail-fallback"></i>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="order-detail-body">
+                                        <div class="order-detail-name"><?= htmlspecialchars((string)$itd['nombre']) ?></div>
+                                        <div class="order-detail-meta">SKU: <?= htmlspecialchars((string)($itd['codigo'] ?? '-')) ?></div>
+                                        <div class="order-detail-meta">Unidades: <?= (int)$itd['cantidad'] ?></div>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="em-actions" style="margin-top:14px;">
+                                <button class="em-btn em-btn-cancel" onclick="cerrarDetallePedidoActual()" style="width:100%;">Cerrar</button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- MODAL CHAT FLOTANTE -->
+                    <?php if (($pedidoActivo['estado'] ?? '') === 'en_camino'): ?>
                     <div class="chat-modal hidden" id="chatModal">
                         <div class="chat-modal-header">
                             <div class="chat-modal-info">
@@ -1496,6 +1583,7 @@ if (!empty($allIds)) {
                             </button>
                         </div>
                     </div>
+                    <?php endif; ?>
 
                 </div>
                 <?php endif; ?>
@@ -1521,6 +1609,7 @@ const CLI_LNG       = <?= isset($pedidoActivo['cli_lng']) && $pedidoActivo['cli_
 const CLI_TEL       = '<?= htmlspecialchars((string)($pedidoActivo['cli_tel'] ?? ''), ENT_QUOTES) ?>';
 const OP_ZONE_RADIUS_KM = <?= (float)($u['zona_radio'] ?? 50) ?>;
 const DELIVERY_RADIUS_METERS = 300;
+const LOCAL_DELIVERY_TEST_MODE = ['localhost', '127.0.0.1', '::1'].includes(String(window.location.hostname || '').toLowerCase());
 let map = null, opMarker = null, cliMarker = null;
 let routeLayers = [];
 let stopMarkers = [];
@@ -1586,9 +1675,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (PEDIDO_ID) {
         initMapaOperador();
         scheduleOperatorMapResize(260);
-        pollChat();
-        setInterval(pollChat, 3000);
-        if (PEDIDO_ESTADO === 'en_camino') iniciarGPS();
+        if (PEDIDO_ESTADO === 'en_camino') {
+            pollChat();
+            setInterval(pollChat, 3000);
+            iniciarGPS();
+        }
         updateDeliveryControls();
     } else if (activeOrdersCache.length) {
         initMapaOperador();
@@ -1674,19 +1765,8 @@ async function pollOperadorActivos() {
         if (badge) badge.textContent = String(data.length);
 
         if (oldSig !== newSig) {
-            const ids = orderedData.map(d => Number(d.id));
-            if (CURRENT_TAB === 'activos' && !PEDIDO_ID && ids.length) {
-                window.location.href = `operador_pedidos.php?tab=activos&pedido_id=${ids[0]}`;
-                return;
-            }
-            if (CURRENT_TAB === 'activos' && PEDIDO_ID && ids.length && !ids.includes(Number(PEDIDO_ID))) {
-                window.location.href = `operador_pedidos.php?tab=activos&pedido_id=${ids[0]}`;
-                return;
-            }
-            if (CURRENT_TAB === 'activos' && PEDIDO_ID && !ids.length) {
-                window.location.href = 'operador_pedidos.php?tab=activos';
-                return;
-            }
+            // Evitar recargas bruscas por polling:
+            // mantenemos la vista actual y solo refrescamos lista/mapa en vivo.
             if (map) {
                 drawAutomaticRoutes();
             }
@@ -1809,7 +1889,7 @@ function updateMensajesThreadHeader() {
         send.disabled = true;
         return;
     }
-    title.textContent = `${conv.cliente_nombre} Â· #${conv.folio_hex}`;
+    title.textContent = `${conv.cliente_nombre} · #${conv.folio_hex}`;
     sub.textContent = conv.estado === 'en_camino' ? 'Pedido en camino' : 'Pedido aceptado';
     btn.href = `operador_pedidos.php?tab=activos&pedido_id=${Number(conv.pedido_id)}`;
     btn.style.display = 'inline-flex';
@@ -2011,7 +2091,7 @@ function initAyudaChat() {
             rows.forEach((m) => {
                 ayudaLastId = Math.max(ayudaLastId, Number(m.id || 0));
                 const mine = Number(m.remitente_id || 0) === OP_USER_ID;
-                const role = mine ? 'Tu' : (String(m.remitente_rol || '') === 'inventario' ? 'Inventario' : 'Admin');
+                const role = mine ? 'Tu' : (String(m.remitente_rol || '') === 'inventario' ? 'Manager' : 'Admin');
                 const wrap = document.createElement('div');
                 wrap.style.maxWidth = '78%';
                 wrap.style.marginLeft = mine ? 'auto' : '0';
@@ -2336,13 +2416,15 @@ function updateDeliveryControls() {
         Number(CLI_LAT || 0),
         Number(CLI_LNG || 0)
     );
-    canDeliverNow = Number.isFinite(distanceMeters) && distanceMeters <= DELIVERY_RADIUS_METERS;
+    canDeliverNow = LOCAL_DELIVERY_TEST_MODE || (Number.isFinite(distanceMeters) && distanceMeters <= DELIVERY_RADIUS_METERS);
 
     if (canDeliverNow) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fa-solid fa-camera"></i> Adjuntar evidencias y entregar';
         if (notice) notice.style.display = 'flex';
-        if (hint) hint.textContent = `Estas a ${Math.round(distanceMeters)}m del cliente.`;
+        if (hint) hint.textContent = LOCAL_DELIVERY_TEST_MODE
+            ? 'Modo prueba local activo: entrega habilitada sin restriccion de distancia.'
+            : `Estas a ${Math.round(distanceMeters)}m del cliente.`;
     } else {
         btn.disabled = true;
         btn.innerHTML = '<i class="fa-solid fa-lock"></i> Entrega habilitada al estar cerca';
@@ -2401,7 +2483,7 @@ function iniciarGPS() {
 }
 
 async function iniciarViaje(id) {
-    alert('El operador no puede iniciar viajes. Inventario/Admin lo hace de forma operativa.');
+    alert('El operador no puede iniciar viajes. Manager/Admin lo hace de forma operativa.');
 }
 
 async function marcarSinProductos(id) {
@@ -2418,16 +2500,34 @@ async function marcarSinProductos(id) {
         }
         await pollOperadorActivos();
         alert('Pedido enviado al final de tu cola.');
-        const siguiente = orderActivosSmart(activeOrdersCache).find(p => Number(p.id) !== Number(id)) || null;
-        if (siguiente) {
-            window.location.href = `operador_pedidos.php?tab=activos&pedido_id=${Number(siguiente.id)}`;
-            return;
-        }
-        window.location.href = 'operador_pedidos.php?tab=activos';
+        // Sin redireccion forzada para una experiencia mas fluida.
+        drawAutomaticRoutes();
     } catch (e) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> No tengo productos';
+        btn.innerHTML = '<i class="fa-solid fa-ban"></i> Solicitar cancelacion';
         alert('Error: ' + (e.message || 'No se pudo actualizar la cola.'));
+    }
+}
+
+async function solicitarCancelacionOperador(id) {
+    const seguro = window.confirm('¿Seguro que quieres solicitar la cancelacion de este viaje?');
+    if (!seguro) return;
+    const motivo = window.prompt('Motivo de cancelacion (ej: cliente no estaba, direccion incorrecta, etc.):');
+    if (!motivo || !motivo.trim()) {
+        alert('Debes escribir un motivo.');
+        return;
+    }
+    try {
+        const res = await fetch(`../api/pedido.php?action=solicitar_cancelacion&pedido_id=${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo: motivo.trim() })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) throw new Error(data.error || 'No se pudo enviar la solicitud.');
+        alert('Solicitud enviada a Admin/Manager para revision.');
+    } catch (e) {
+        alert(e.message || 'No se pudo enviar la solicitud.');
     }
 }
 
@@ -2443,6 +2543,16 @@ function abrirModalEntrega() {
 
 function cerrarModalEntrega() {
     document.getElementById('entregaOverlay').classList.remove('active');
+}
+
+function abrirDetallePedidoActual() {
+    const modal = document.getElementById('detallePedidoActualModal');
+    if (modal) modal.classList.add('active');
+}
+
+function cerrarDetallePedidoActual() {
+    const modal = document.getElementById('detallePedidoActualModal');
+    if (modal) modal.classList.remove('active');
 }
 
 function renderPreviews(event) {
@@ -2529,13 +2639,15 @@ async function procesarEntrega(id) {
                 const nextRes = await fetch('../api/pedido.php?action=operador_activos', { cache: 'no-store' });
                 if (nextRes.ok) {
                     const nextData = await nextRes.json();
-                    if (Array.isArray(nextData) && nextData.length > 0) {
-                        window.location.href = `operador_pedidos.php?tab=activos&pedido_id=${Number(nextData[0].id)}`;
-                        return;
+                    if (Array.isArray(nextData)) {
+                        activeOrdersCache = nextData;
+                        renderActivosSidebar(orderActivosSmart(nextData));
                     }
                 }
             } catch (_) {}
-            window.location.href = 'operador_pedidos.php?tab=activos';
+            cerrarModalEntrega();
+            drawAutomaticRoutes();
+            alert('Entrega registrada. La lista se actualizo sin recargar la pagina.');
         } else {
             throw new Error(data.error || 'No se pudo marcar como entregado');
         }
@@ -2548,7 +2660,7 @@ async function procesarEntrega(id) {
 
 // Ã¢â€â‚¬Ã¢â€â‚¬ CHAT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 async function pollChat() {
-    if (!PEDIDO_ID || !document.getElementById('chatMensajes')) return;
+    if (!PEDIDO_ID || PEDIDO_ESTADO !== 'en_camino' || !document.getElementById('chatMensajes')) return;
     try {
         const res  = await fetch(`../api/pedido.php?action=chat_get&pedido_id=${PEDIDO_ID}&desde=${lastChatId}`);
         if (!res.ok) return;
@@ -2596,6 +2708,7 @@ async function pollChat() {
 }
 
 async function enviarMensaje() {
+    if (PEDIDO_ESTADO !== 'en_camino') return;
     const input = document.getElementById('chatInput');
     const msg = input.value.trim(); if (!msg) return;
     input.value = '';
@@ -2705,6 +2818,11 @@ function abrirFotoFullscreen(url) {
 </script>
 </body>
 </html>
+
+
+
+
+
 
 
 

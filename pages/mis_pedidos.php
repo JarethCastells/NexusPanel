@@ -10,7 +10,17 @@ $pedidoId = (int)($_GET['pedido_id'] ?? $_GET['nuevo'] ?? 0);
 $todosPedidos = $pdo->prepare("
     SELECT p.*, u.nombre AS operador_nombre
     FROM pedidos p LEFT JOIN usuarios u ON u.id=p.operador_id
-    WHERE p.cliente_id=? ORDER BY p.id DESC
+    WHERE p.cliente_id=?
+    ORDER BY
+        CASE
+            WHEN p.estado = 'en_camino' THEN 0
+            WHEN p.estado = 'aceptado' THEN 1
+            WHEN p.estado = 'pendiente' THEN 2
+            WHEN p.estado = 'entregado' THEN 3
+            ELSE 4
+        END ASC,
+        p.updated_at DESC,
+        p.id DESC
 ");
 $todosPedidos->execute([$u['usuario_id']]);
 $todosPedidos = $todosPedidos->fetchAll();
@@ -23,6 +33,8 @@ if (!$pedidoId && !empty($todosPedidos)) {
 // Pedido activo seleccionado
 $pedido = null;
 $itemsPedido = [];
+$solicitudCancelacionPendiente = null;
+$calificacionActual = null;
 if ($pedidoId) {
     $st = $pdo->prepare("SELECT p.*,u.nombre AS op_nombre,u.telefono AS op_tel,u.lat AS op_lat,u.lng AS op_lng FROM pedidos p LEFT JOIN usuarios u ON u.id=p.operador_id WHERE p.id=? AND p.cliente_id=?");
     $st->execute([$pedidoId, $u['usuario_id']]);
@@ -42,6 +54,28 @@ if ($pedidoId) {
         ");
         $stItems->execute([$pedidoId]);
         $itemsPedido = $stItems->fetchAll();
+
+        if (tableExists($pdo, 'pedido_cancelaciones')) {
+            $stSol = $pdo->prepare("
+                SELECT id, motivo, estado_solicitud, created_at
+                FROM pedido_cancelaciones
+                WHERE pedido_id = ? AND estado_solicitud = 'pendiente'
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stSol->execute([$pedidoId]);
+            $solicitudCancelacionPendiente = $stSol->fetch() ?: null;
+        }
+        if (tableExists($pdo, 'pedido_calificaciones')) {
+            $stCal = $pdo->prepare("
+                SELECT estrellas, comentario, updated_at
+                FROM pedido_calificaciones
+                WHERE pedido_id = ? AND cliente_id = ?
+                LIMIT 1
+            ");
+            $stCal->execute([$pedidoId, (int)$u['usuario_id']]);
+            $calificacionActual = $stCal->fetch() ?: null;
+        }
     }
 }
 
@@ -216,6 +250,128 @@ if (!empty($itemsPedido)) {
     .chat-fab-inline:hover {
         transform: translateY(-2px);
         box-shadow: 0 8px 25px rgba(59,130,246,0.5);
+    }
+    .rating-hero {
+        flex: 1;
+        min-height: 320px;
+        background:
+            radial-gradient(1200px 420px at 15% -20%, rgba(16,185,129,0.28), transparent 56%),
+            radial-gradient(800px 260px at 110% 110%, rgba(59,130,246,0.24), transparent 60%),
+            linear-gradient(165deg, #071428, #0b1f2f 45%, #0d2638 100%);
+        border-radius: 16px;
+        border: 1px solid rgba(52,211,153,0.3);
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 40px rgba(2,8,23,0.45);
+    }
+    .rating-hero h3 {
+        margin: 0;
+        color: #d1fae5;
+        font-size: 40px;
+        line-height: 1;
+        letter-spacing: 0.4px;
+    }
+    .rating-hero p {
+        margin: 0;
+        color: #cbd5e1;
+        font-size: 18px;
+    }
+    .rating-hero .rating-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .rating-label {
+        font-size: 11px;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: #93c5fd;
+        font-weight: 700;
+    }
+    .rating-stars-preview {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #facc15;
+        font-size: 18px;
+    }
+    .rating-stars-preview i {
+        filter: drop-shadow(0 2px 8px rgba(250,204,21,0.35));
+    }
+    .rating-select-wrap {
+        position: relative;
+        min-width: 180px;
+    }
+    .rating-select {
+        width: 100%;
+        height: 44px;
+        border-radius: 12px;
+        border: 1px solid rgba(148,163,184,0.35);
+        background: rgba(8,21,44,0.75);
+        color: #e2e8f0;
+        font-weight: 700;
+        padding: 0 40px 0 14px;
+        outline: none;
+        appearance: none;
+        transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+    .rating-select:focus {
+        border-color: rgba(56,189,248,0.75);
+        box-shadow: 0 0 0 3px rgba(14,165,233,0.22);
+        background: rgba(8,21,44,0.95);
+    }
+    .rating-select-wrap::after {
+        content: "\f078";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        position: absolute;
+        right: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #93c5fd;
+        pointer-events: none;
+        font-size: 12px;
+    }
+    .rating-save-btn {
+        height: 44px;
+        border-radius: 12px;
+        border: 1px solid rgba(16,185,129,0.35);
+        background: linear-gradient(135deg,#10b981,#059669);
+        color: #fff;
+        padding: 0 18px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 10px 22px rgba(16,185,129,0.3);
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .rating-save-btn:hover {
+        transform: translateY(-1px);
+        filter: brightness(1.05);
+        box-shadow: 0 14px 26px rgba(16,185,129,0.4);
+    }
+    .rating-comment {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid rgba(148,163,184,0.3);
+        background: rgba(5,12,24,0.72);
+        color: #e2e8f0;
+        padding: 14px 16px;
+        min-height: 118px;
+        resize: vertical;
+        outline: none;
+        transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+    .rating-comment::placeholder { color: #94a3b8; }
+    .rating-comment:focus {
+        border-color: rgba(56,189,248,0.75);
+        box-shadow: 0 0 0 3px rgba(14,165,233,0.18);
+        background: rgba(5,12,24,0.9);
     }
     /* Hard-fix movil: asegurar scroll y botones legibles */
     @media (max-width: 768px) {
@@ -554,7 +710,7 @@ if (!empty($itemsPedido)) {
                             </div>
                         </div>
                         <?php endif; ?>
-                        <?php if ($pedido['operador_id']): ?>
+                        <?php if (($pedido['operador_id'] ?? 0) && (($pedido['estado'] ?? '') === 'en_camino')): ?>
                         <div class="operador-info">
                             <div class="op-avatar"><?= strtoupper(substr($pedido['op_nombre']??'O',0,1)) ?></div>
                             <div style="flex:1;min-width:0;">
@@ -600,18 +756,36 @@ if (!empty($itemsPedido)) {
                             </div>
                         </div>
                         <?php endif; ?>
+
+                        <?php if (in_array($pedido['estado'], ['pendiente','aceptado','en_camino'], true)): ?>
+                        <div style="margin-top:12px;padding:12px;border-radius:12px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.08);">
+                            <div style="font-size:11px;color:#fca5a5;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Cancelar pedido</div>
+                            <?php if ($solicitudCancelacionPendiente): ?>
+                                <div style="font-size:12px;color:#fda4af;">Ya tienes una solicitud pendiente de revision.</div>
+                            <?php else: ?>
+                                <button
+                                    type="button"
+                                    onclick="solicitarCancelacionCliente(<?= (int)$pedido['id'] ?>)"
+                                    style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;"
+                                >
+                                    <i class="fa-solid fa-ban"></i> Solicitar cancelacion
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+
                     </div>
                 </div>
 
                 <!-- Mapa tracking -->
-                <?php if (in_array($pedido['estado'], ['aceptado','en_camino'])): ?>
+                <?php if (($pedido['estado'] ?? '') === 'en_camino'): ?>
                 <div class="mapa-wrap">
                     <div id="trackingMapa"></div>
                     <div class="mapa-legend">
                         <span id="trackingStatus">Actualizando ubicacion...</span>
                         <div class="live-badge"><span class="blink-dot"></span> EN VIVO</div>
                     </div>
-                    <?php if ($pedido['operador_id']): ?>
+                    <?php if (($pedido['operador_id'] ?? 0) && (($pedido['estado'] ?? '') === 'en_camino')): ?>
                     <button class="chat-fab" onclick="toggleChatModal()" id="chatFab">
                         <i class="fa-solid fa-comments"></i>
                         <span>Chat</span>
@@ -619,18 +793,43 @@ if (!empty($itemsPedido)) {
                     </button>
                     <?php endif; ?>
                 </div>
+                <?php elseif (($pedido['estado'] ?? '') === 'entregado'): ?>
+                <div class="rating-hero">
+                    <div class="rating-label">Experiencia de entrega</div>
+                    <h3><i class="fa-solid fa-star"></i> Califica tu entrega</h3>
+                    <p>Tu pedido ya fue entregado. Cuéntanos qué tal fue tu experiencia.</p>
+                    <div class="rating-stars-preview" id="ratingStarsPreview" aria-hidden="true">
+                        <i class="fa-solid fa-star" data-star="1"></i>
+                        <i class="fa-solid fa-star" data-star="2"></i>
+                        <i class="fa-solid fa-star" data-star="3"></i>
+                        <i class="fa-solid fa-star" data-star="4"></i>
+                        <i class="fa-solid fa-star" data-star="5"></i>
+                    </div>
+                    <div class="rating-row">
+                        <div class="rating-select-wrap">
+                            <select id="ratingStars" class="rating-select">
+                                <option value="5" <?= ((int)($calificacionActual['estrellas'] ?? 0) === 5) ? 'selected' : '' ?>>5 estrellas</option>
+                                <option value="4" <?= ((int)($calificacionActual['estrellas'] ?? 0) === 4) ? 'selected' : '' ?>>4 estrellas</option>
+                                <option value="3" <?= ((int)($calificacionActual['estrellas'] ?? 0) === 3) ? 'selected' : '' ?>>3 estrellas</option>
+                                <option value="2" <?= ((int)($calificacionActual['estrellas'] ?? 0) === 2) ? 'selected' : '' ?>>2 estrellas</option>
+                                <option value="1" <?= ((int)($calificacionActual['estrellas'] ?? 0) === 1) ? 'selected' : '' ?>>1 estrella</option>
+                            </select>
+                        </div>
+                        <button type="button" id="ratingSaveBtn" onclick="guardarCalificacionCliente(<?= (int)$pedido['id'] ?>)" class="rating-save-btn">
+                            <i class="fa-solid fa-star"></i> Guardar
+                        </button>
+                    </div>
+                    <textarea id="ratingComment" class="rating-comment" rows="3" placeholder="Comentario (opcional)"><?= htmlspecialchars((string)($calificacionActual['comentario'] ?? '')) ?></textarea>
+                    <div id="ratingThanksMessage" style="display:none;color:#a7f3d0;font-weight:700;margin-top:2px;">Gracias por su opinion, su opinion es muy importante.</div>
+                </div>
                 <?php elseif ($pedido['operador_id']): ?>
-                <!-- Sin mapa pero con operador - boton chat standalone -->
-                <div class="chat-fab-standalone">
-                    <button class="chat-fab-inline" onclick="toggleChatModal()">
-                        <i class="fa-solid fa-comments"></i> Abrir chat con operador
-                        <span class="fab-badge hidden" id="chatBadge">0</span>
-                    </button>
+                <div class="chat-fab-standalone" style="justify-content:center;">
+                    <div style="color:var(--text-muted);font-weight:600;">El chat se habilita cuando tu pedido esta en camino.</div>
                 </div>
                 <?php endif; ?>
 
                 <!-- Modal chat flotante -->
-                <?php if ($pedido['operador_id']): ?>
+                <?php if (($pedido['operador_id'] ?? 0) && (($pedido['estado'] ?? '') === 'en_camino')): ?>
                 <div class="chat-modal hidden" id="chatModal">
                     <div class="chat-modal-header">
                         <div class="chat-modal-info">
@@ -675,6 +874,7 @@ const PEDIDO_ESTADO = '<?= $pedido['estado'] ?? '' ?>';
 const CLI_LAT = <?= $pedido['lat_entrega'] ?? 0 ?>;
 const CLI_LNG = <?= $pedido['lng_entrega'] ?? 0 ?>;
 const CLIENTE_NOMBRE = <?= json_encode($u['nombre'] ?? '', JSON_UNESCAPED_UNICODE) ?>;
+const YA_CALIFICADO = <?= !empty($calificacionActual) ? 'true' : 'false' ?>;
 let map = null, opMarker = null, cliMarker = null;
 let lastChatId = 0;
 
@@ -715,17 +915,23 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', () => scheduleTrackingMapResize(120));
     window.addEventListener('orientationchange', () => scheduleTrackingMapResize(280));
 
-    if (PEDIDO_ID && ['aceptado','en_camino'].includes(PEDIDO_ESTADO)) {
+    if (PEDIDO_ID && PEDIDO_ESTADO === 'en_camino') {
         initTrackingMap();
         scheduleTrackingMapResize(260);
         setInterval(pollTracking, 3000);
     }
-    if (PEDIDO_ID && document.getElementById('chatMensajes')) {
+    if (PEDIDO_ID && PEDIDO_ESTADO === 'en_camino' && document.getElementById('chatMensajes')) {
         pollChat();
         setInterval(pollChat, 3000);
     }
     if (PEDIDO_ID && document.getElementById('btnRevocarViaje')) {
         sincronizarEstadoLinkTracking(PEDIDO_ID);
+    }
+    const ratingSelect = document.getElementById('ratingStars');
+    if (ratingSelect) {
+        ratingSelect.addEventListener('change', updateRatingStarsPreview);
+        updateRatingStarsPreview();
+        if (YA_CALIFICADO) lockRatingForm();
     }
 });
 
@@ -750,6 +956,38 @@ function initPedidosSearch() {
             card.style.display = !q || hay.includes(q) ? '' : 'none';
         });
     });
+}
+
+function updateRatingStarsPreview() {
+    const select = document.getElementById('ratingStars');
+    const preview = document.getElementById('ratingStarsPreview');
+    if (!select || !preview) return;
+    const active = Number(select.value || 0);
+    preview.querySelectorAll('[data-star]').forEach((starEl) => {
+        const starValue = Number(starEl.getAttribute('data-star') || 0);
+        if (starValue <= active) {
+            starEl.style.opacity = '1';
+            starEl.style.color = '#facc15';
+        } else {
+            starEl.style.opacity = '0.25';
+            starEl.style.color = '#64748b';
+        }
+    });
+}
+
+function lockRatingForm() {
+    const ratingSelect = document.getElementById('ratingStars');
+    const ratingComment = document.getElementById('ratingComment');
+    const ratingSaveBtn = document.getElementById('ratingSaveBtn');
+    const thanks = document.getElementById('ratingThanksMessage');
+    if (ratingSelect) ratingSelect.disabled = true;
+    if (ratingComment) ratingComment.disabled = true;
+    if (ratingSaveBtn) {
+        ratingSaveBtn.disabled = true;
+        ratingSaveBtn.style.opacity = '.65';
+        ratingSaveBtn.style.cursor = 'not-allowed';
+    }
+    if (thanks) thanks.style.display = 'block';
 }
 
 // â”€â”€ MAPA TRACKING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1044,6 +1282,54 @@ async function revocarLinkViaje(btn, pedidoId) {
     }
 }
 
+async function solicitarCancelacionCliente(pedidoId) {
+    const seguro = window.confirm('¿Seguro que quieres cancelar este pedido?');
+    if (!seguro) return;
+    const motivo = window.prompt('Escribe el motivo de cancelacion:');
+    if (!motivo || !motivo.trim()) {
+        alert('Debes indicar un motivo.');
+        return;
+    }
+    try {
+        const res = await fetch(`../api/pedido.php?action=solicitar_cancelacion&pedido_id=${encodeURIComponent(pedidoId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motivo: motivo.trim() })
+        });
+        const data = await leerJsonSeguro(res);
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'No se pudo enviar la solicitud.');
+        }
+        alert('Solicitud de cancelacion enviada. Admin/Manager la revisara.');
+        window.location.reload();
+    } catch (err) {
+        alert(err?.message || 'No se pudo enviar la solicitud.');
+    }
+}
+
+async function guardarCalificacionCliente(pedidoId) {
+    const estrellas = Number(document.getElementById('ratingStars')?.value || 0);
+    const comentario = String(document.getElementById('ratingComment')?.value || '').trim();
+    const btn = document.getElementById('ratingSaveBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch(`../api/pedido.php?action=calificar_entrega&pedido_id=${encodeURIComponent(pedidoId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ estrellas, comentario })
+        });
+        const data = await leerJsonSeguro(res);
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'No se pudo guardar la calificacion.');
+        }
+        alert('Gracias por su opinion, su opinion es muy importante.');
+        lockRatingForm();
+    } catch (err) {
+        if (btn) btn.disabled = false;
+        alert(err?.message || 'No se pudo guardar la calificacion.');
+    }
+}
+
 async function sincronizarEstadoLinkTracking(pedidoId) {
     const btn = document.getElementById('btnRevocarViaje');
     if (!btn) return;
@@ -1084,6 +1370,9 @@ function updateClock() {
 </script>
 </body>
 </html>
+
+
+
 
 
 

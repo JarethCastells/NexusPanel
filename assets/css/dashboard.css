@@ -318,6 +318,187 @@ body {
     margin-bottom: 24px;
 }
 
+/* =============================================
+   GLOBAL RESPONSIVE SYSTEM (Android/iPhone/Tablet)
+   ============================================= */
+
+img,
+video,
+canvas,
+svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.data-table {
+    min-width: 860px;
+}
+
+/* Tablets and down */
+@media (max-width: 1200px) {
+    .content-area {
+        padding: 24px;
+    }
+    .stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Large phones / small tablets */
+@media (max-width: 992px) {
+    :root {
+        --sidebar-w: 280px;
+    }
+
+    body {
+        overflow-x: hidden;
+    }
+
+    .sidebar {
+        transform: translateX(-100%);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+        z-index: 1500;
+    }
+
+    body.sidebar-open .sidebar,
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .mobile-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .topbar {
+        padding: 0 14px;
+        gap: 10px;
+    }
+
+    .topbar-left,
+    .topbar-right {
+        min-width: 0;
+    }
+
+    .breadcrumb-custom {
+        gap: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 52vw;
+    }
+
+    .topbar-date {
+        display: none;
+    }
+
+    .welcome-banner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 18px;
+    }
+
+    .welcome-banner h1 {
+        font-size: 20px;
+    }
+
+    .welcome-badge {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* Phones */
+@media (max-width: 768px) {
+    .content-area {
+        padding: 14px;
+    }
+
+    .sidebar-header,
+    .sidebar-user {
+        padding: 16px;
+    }
+
+    .logo-text-sm {
+        font-size: 15px;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .card-panel {
+        border-radius: 12px;
+        padding: 14px;
+    }
+
+    .panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .panel-title {
+        font-size: 18px;
+    }
+
+    .panel-subtitle {
+        font-size: 12px;
+    }
+
+    .btn-primary-custom,
+    .btn-secondary-custom,
+    .btn-table {
+        min-height: 40px;
+    }
+
+    .toolbar-grid,
+    #pedidosToolbar {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+
+    .modal-content {
+        margin: 8px;
+    }
+}
+
+/* Small phones */
+@media (max-width: 480px) {
+    .topbar {
+        height: 58px;
+    }
+
+    .topbar-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+    }
+
+    .content-area {
+        padding: 10px;
+    }
+
+    .breadcrumb-custom {
+        max-width: 44vw;
+    }
+}
+
 .stat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
