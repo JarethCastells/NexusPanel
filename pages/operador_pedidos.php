@@ -823,7 +823,21 @@ if (!empty($allIds)) {
     /* MÃƒÂ³vil pequeÃƒÂ±o */
     @media (max-width: 480px) {
         .delivery-map { height: 260px !important; min-height: 260px !important; }
-        .dbar-products { display: none; } /* Ocultar pills en pantallas muy pequeÃƒÂ±as */
+        .dbar-products {
+            display: flex !important;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .dbar-pill-product,
+        .dbar-more {
+            display: none !important; /* Ocultar solo pills, no el boton */
+        }
+        .btn-view-order {
+            display: inline-flex !important;
+            width: 100%;
+            justify-content: center;
+            min-height: 40px;
+        }
         .op-tab span:not(.tab-badge) { display: none; }
         .op-tab { padding: 12px 16px; }
     }
@@ -1054,7 +1068,87 @@ if (!empty($allIds)) {
             opacity: 0 !important;
         }
     }
-    </style>
+    
+    /* Fix responsive: Mensajes/Ayuda operador en movil */
+    .op-msg-layout > *,
+    .help-layout > * { min-width: 0; }
+
+    @media (max-width: 900px) {
+        .op-msg-layout {
+            grid-template-columns: 1fr !important;
+            min-height: auto !important;
+        }
+        .op-msg-convos {
+            max-height: 42vh;
+        }
+        .op-msg-thread {
+            min-height: 56vh !important;
+        }
+        .help-layout {
+            grid-template-columns: 1fr !important;
+        }
+        .help-layout > div:first-child {
+            max-height: 34vh;
+            overflow: auto !important;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .op-msg-layout {
+            gap: 10px !important;
+        }
+        .op-msg-card {
+            padding: 10px 9px;
+        }
+        .op-msg-top {
+            align-items: flex-start;
+        }
+        .op-msg-status {
+            white-space: nowrap;
+        }
+        .op-msg-last,
+        .op-msg-name {
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .op-msg-thread {
+            min-height: 60vh !important;
+        }
+        .op-thread-head {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        .op-thread-actions {
+            width: 100%;
+        }
+        .op-thread-actions .btn-chip {
+            width: 100%;
+            justify-content: center;
+        }
+        .op-thread-foot,
+        #helpChatForm {
+            grid-template-columns: 1fr !important;
+        }
+        .op-thread-foot .btn-primary-custom,
+        #helpChatSendBtn {
+            width: 100%;
+            justify-content: center;
+        }
+        .help-layout {
+            gap: 10px !important;
+        }
+        .help-layout > div,
+        .op-msg-convos,
+        .op-msg-thread {
+            border-radius: 12px;
+        }
+        .help-layout > div:last-child {
+            min-height: 60vh !important;
+        }
+    }
+</style>
 </head>
 <body>
 <aside class="sidebar" id="sidebar">
@@ -2818,6 +2912,7 @@ function abrirFotoFullscreen(url) {
 </script>
 </body>
 </html>
+
 
 
 

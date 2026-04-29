@@ -625,6 +625,16 @@ foreach ($pedidos as $pp) {
         @media (max-width: 1280px) { .toolbar-grid { grid-template-columns: repeat(3,minmax(150px,1fr)); } }
         @media (max-width: 900px) { .toolbar-grid { grid-template-columns: 1fr 1fr; } .data-table{min-width:920px;} }
         @media (max-width: 640px) { .toolbar-grid { grid-template-columns: 1fr; } }
+        @media (max-width: 768px) {
+            .content-area { padding: 12px !important; }
+            .toolbar-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
+            .table-wrapper { margin: 0 -6px; padding: 0 6px; overflow-x: auto; }
+            .data-table { min-width: 760px !important; }
+            .btn-table { min-height: 38px; padding: 0 10px; }
+            .data-table th, .data-table td { font-size: 12px !important; padding: 11px 8px !important; }
+            .panel-title { font-size: 18px !important; }
+            .panel-subtitle { font-size: 13px !important; }
+        }
     </style>
 </head>
 <body>

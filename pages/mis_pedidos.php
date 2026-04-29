@@ -535,6 +535,82 @@ if (!empty($itemsPedido)) {
             opacity: 0 !important;
         }
     }
+    /* Override final movil: Mis Pedidos sin layout roto */
+    @media (max-width: 768px) {
+        .content-area {
+            padding: 0 0 14px !important;
+        }
+        .pedidos-layout {
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: auto !important;
+            overflow: visible !important;
+        }
+        .pedidos-lista {
+            display: flex !important;
+            flex-direction: row !important;
+            gap: 8px !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            padding: 8px !important;
+            max-height: none !important;
+            border-bottom: 1px solid var(--border) !important;
+        }
+        .pedidos-lista .pedido-item {
+            min-width: 84vw !important;
+            max-width: 84vw !important;
+            border-right: 1px solid var(--border) !important;
+            border-bottom: none !important;
+            border-radius: 10px !important;
+        }
+        .pedido-detalle {
+            overflow: visible !important;
+        }
+        .estado-stepper {
+            padding: 14px 10px !important;
+        }
+        .stepper-wrap {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: 10px 8px !important;
+            overflow: visible !important;
+            justify-content: stretch !important;
+            padding: 0 !important;
+        }
+        .stepper-line {
+            display: none !important;
+        }
+        .stepper-step {
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            border-radius: 12px;
+            padding: 10px 8px;
+            min-height: 112px;
+            justify-content: flex-start;
+            background: rgba(8, 18, 35, 0.55);
+        }
+        .stepper-step small {
+            max-width: 100% !important;
+            font-size: 10px !important;
+            line-height: 1.2 !important;
+        }
+        .detalle-grid {
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 10px !important;
+            margin-top: 10px !important;
+            height: auto !important;
+        }
+        .detalle-info {
+            width: 100% !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        .mapa-wrap {
+            height: 300px !important;
+            min-height: 300px !important;
+            max-height: 340px !important;
+        }
+    }
     </style>
 </head>
 <body>

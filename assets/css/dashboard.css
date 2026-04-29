@@ -789,5 +789,43 @@ svg {
     .panel-title { font-size: 14px; }
 }
 
+/* =============================================
+   FINAL MOBILE OVERRIDE (Manager/Admin)
+   Avoid mini-scaled rendering and clipped layouts
+   ============================================= */
+@media (max-width: 768px) {
+    html,
+    body {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+    body {
+        display: block;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+    }
+    .topbar,
+    .content-area {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .content-area {
+        padding: 12px !important;
+    }
+    .table-wrapper {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    .data-table th,
+    .data-table td {
+        white-space: nowrap;
+    }
+}
+
 
 

@@ -718,6 +718,17 @@ function imgUrl($imagen) {
         .prod-table td { padding: 10px 8px; }
         .prod-table th { padding: 10px 8px; }
     }
+    @media (max-width: 768px) {
+        .content-area { padding: 12px !important; }
+        .prod-table-wrap { margin: 0 -6px; padding: 0 6px; overflow-x: auto; }
+        .prod-table { min-width: 720px !important; }
+        .prod-search-form { gap: 8px !important; }
+        .prod-search-form .modal-input,
+        .prod-search-form .modal-select { min-width: 0 !important; width: 100% !important; }
+        .prod-table th, .prod-table td { font-size: 12px !important; padding: 11px 8px !important; }
+        .status-pill { font-size: 11px !important; padding: 4px 8px !important; }
+        .btn-table, .action-btn { min-height: 34px; }
+    }
     </style>
 </head>
 <body>

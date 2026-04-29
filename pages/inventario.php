@@ -260,6 +260,14 @@ $movs = $pdo->query("
         .panel-noti-item strong { display: block; font-size: 13px; color: #fff; }
         .panel-noti-item small { display: block; color: var(--text-muted); margin-top: 2px; font-size: 11px; }
         @media (max-width: 900px) { .toolbar { grid-template-columns: 1fr; } }
+        @media (max-width: 768px) {
+            .toolbar { grid-template-columns: 1fr !important; gap: 8px !important; }
+            .table-wrapper { margin: 0 -6px; padding: 0 6px; }
+            .data-table { min-width: 760px !important; }
+            .stats-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
+            .card-panel { border-radius: 12px; }
+            .panel-header { padding: 14px 14px !important; }
+        }
     </style>
 </head>
 <body>

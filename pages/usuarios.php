@@ -255,6 +255,19 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             .usuarios-grid { grid-template-columns: 1fr; }
             .usuarios-mapa { height: 300px; }
         }
+        @media (max-width: 768px) {
+            .content-area { padding: 12px !important; }
+            .welcome-banner { padding: 14px !important; gap: 10px !important; }
+            .welcome-banner h1 { font-size: 20px !important; }
+            .welcome-banner p { font-size: 13px !important; }
+            .usuarios-mapa { height: 260px !important; }
+            .perfil-meta { grid-template-columns: 1fr !important; }
+            .users-filter { font-size: 14px; padding: 11px 12px; }
+            .table-wrapper { margin: 0 -6px; padding: 0 6px; }
+            .data-table { min-width: 760px !important; }
+            .data-table th, .data-table td { padding: 11px 10px !important; font-size: 12px !important; }
+            .action-btn { width: 34px; height: 34px; }
+        }
     </style>
 </head>
 <body>

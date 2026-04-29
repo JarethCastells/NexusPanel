@@ -290,6 +290,44 @@ $productoSolicitado = (int)($_GET['producto'] ?? 0);
         .ml-info { padding: 8px 10px 10px !important; }
         .ml-envio { display: none !important; }
     }
+    /* Override final movil: filtros de catalogo sin recortes */
+    @media (max-width: 768px) {
+        .tienda-filter-shell {
+            grid-template-columns: 1fr !important;
+            border-radius: 14px !important;
+            overflow: hidden !important;
+        }
+        .tienda-filter-block {
+            width: 100% !important;
+            border-left: none !important;
+            border-top: 1px solid #e6edf7 !important;
+            padding: 10px 12px !important;
+        }
+        .tienda-filter-block:first-child {
+            border-top: none !important;
+        }
+        .tienda-filter-dropdown-block {
+            z-index: 2 !important;
+        }
+        .filter-dropdown-trigger {
+            min-height: 48px !important;
+            border-radius: 12px !important;
+            width: 100% !important;
+        }
+        .filter-dropdown-menu {
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-top: 8px !important;
+            box-shadow: none !important;
+        }
+        .tienda-pill-group {
+            flex-wrap: nowrap !important;
+            overflow-x: auto !important;
+            padding-bottom: 4px !important;
+            scrollbar-width: thin;
+        }
+    }
     </style>
 </head>
 <body>
