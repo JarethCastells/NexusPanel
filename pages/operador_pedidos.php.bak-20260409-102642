@@ -1,0 +1,1048 @@
+<?php
+require_once '../includes/auth.php';
+require_once '../includes/db.php';
+requireAuth();
+if (!esOperador() && !esAdmin()) { header('Location: dashboard.php'); exit; }
+
+$u = usuarioActual();
+$tab = $_GET['tab'] ?? 'pendientes';
+
+// Mis pedidos activos como operador
+$misActivos = $pdo->prepare("
+    SELECT p.*, u.nombre AS cli_nombre, u.telefono AS cli_tel, u.domicilio AS cli_dom, u.lat AS cli_lat, u.lng AS cli_lng
+    FROM pedidos p JOIN usuarios u ON u.id=p.cliente_id
+    WHERE p.operador_id=? AND p.estado IN ('aceptado','en_camino')
+    ORDER BY p.updated_at DESC
+");
+$misActivos->execute([$u['usuario_id']]);
+$misActivos = $misActivos->fetchAll();
+
+// Pedido seleccionado
+$pedidoId = (int)($_GET['pedido_id'] ?? ($misActivos[0]['id'] ?? 0));
+$pedidoActivo = null;
+$itemsPedido  = [];
+if ($pedidoId) {
+    $st = $pdo->prepare("SELECT p.*,u.nombre AS cli_nombre,u.telefono AS cli_tel,u.domicilio AS cli_dom,u.lat AS cli_lat,u.lng AS cli_lng FROM pedidos p JOIN usuarios u ON u.id=p.cliente_id WHERE p.id=?");
+    $st->execute([$pedidoId]);
+    $pedidoActivo = $st->fetch();
+    if ($pedidoActivo) {
+        $stI = $pdo->prepare("SELECT pi.*,pr.nombre,pr.codigo FROM pedido_items pi JOIN productos pr ON pr.id=pi.producto_id WHERE pi.pedido_id=?");
+        $stI->execute([$pedidoId]);
+        $itemsPedido = $stI->fetchAll();
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusPanel — Mis Entregas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/pedidos.css">
+    <link rel="stylesheet" href="../assets/css/operador.css">
+    <style>
+    /* ══ LAYOUT ENTREGA ESTILO UBER ══════════════════════ */
+    .delivery-view {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 112px);
+        background: #060a12;
+        width: 100%;
+        overflow: hidden;
+    }
+    /* Full height sin padding */
+    .main-content .content-area { padding: 0 !important; }
+
+    /* La tab de activos ocupa toda la altura */
+    #tab-activos { height: calc(100vh - 112px); }
+
+    /* Layout con lista lateral + panel principal */
+    .activos-layout {
+        display: flex !important;
+        height: 100%;
+        overflow: hidden;
+    }
+    .activos-lista {
+        width: 220px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        border-right: 1px solid var(--border);
+        background: var(--bg-card);
+    }
+    .activo-panel {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* ── Mapa ── */
+    .delivery-map {
+        height: 340px;
+        flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .delivery-map #mapaOperador {
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Pill estado flotante */
+    .delivery-status-pill {
+        position: absolute; top: 14px; left: 14px; z-index: 1000;
+        display: flex; align-items: center; gap: 8px;
+        background: rgba(6,10,18,0.88); backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 100px; padding: 7px 16px;
+        font-size: 12px; font-weight: 600; color: #fff;
+    }
+    .pill-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #10b981; flex-shrink: 0;
+        box-shadow: 0 0 6px #10b981;
+    }
+    .pill-dot.blink { animation: blink 1.2s ease-in-out infinite; }
+
+    /* Leyenda mapa */
+    .map-legend {
+        position: absolute; bottom: 12px; left: 50%;
+        transform: translateX(-50%); z-index: 1000;
+        display: flex; gap: 14px; align-items: center;
+        background: rgba(6,10,18,0.82); backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 100px; padding: 6px 18px;
+        font-size: 12px; color: #fff; pointer-events: none;
+        white-space: nowrap;
+    }
+
+    /* FAB chat */
+    .chat-fab {
+        position: absolute; bottom: 90px; right: 18px; z-index: 1000;
+        width: 52px; height: 52px;
+        background: linear-gradient(135deg, #10b981, #047857);
+        border: none; border-radius: 50%;
+        color: #fff; font-size: 20px; cursor: pointer;
+        box-shadow: 0 4px 20px rgba(16,185,129,0.5);
+        display: flex; align-items: center; justify-content: center;
+        transition: all .2s;
+    }
+    .chat-fab:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(16,185,129,0.6); }
+    .fab-badge {
+        position: absolute; top: -4px; right: -4px;
+        background: #ef4444; color: #fff;
+        font-size: 10px; font-weight: 800;
+        min-width: 18px; height: 18px; border-radius: 100px;
+        display: flex; align-items: center; justify-content: center; padding: 0 4px;
+        animation: pop .3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .fab-badge.hidden { display: none; }
+    @keyframes pop { from{transform:scale(0)} to{transform:scale(1)} }
+
+    /* ── Barra inferior ── */
+    .delivery-bar {
+        background: #0d1422;
+        border-top: 1px solid rgba(255,255,255,0.08);
+        padding: 12px 16px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex-shrink: 0;
+    }
+
+    /* Info cliente */
+    .dbar-client {
+        display: flex; align-items: center; gap: 10px;
+    }
+    .dbar-avatar {
+        width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+        background: linear-gradient(135deg, #00d4ff22, #7c3aed22);
+        border: 2px solid rgba(0,212,255,0.3);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; font-weight: 700; color: #00d4ff;
+    }
+    .dbar-info { flex: 1; min-width: 0; }
+    .dbar-name { font-size: 14px; font-weight: 700; color: #f0f6ff; margin-bottom: 1px; }
+    .dbar-addr { font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .dbar-addr i { color: #00d4ff; font-size: 10px; flex-shrink: 0; }
+    .dbar-total {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px; font-weight: 700; color: #10b981;
+        flex-shrink: 0;
+    }
+
+    /* Pills de productos — scroll horizontal */
+    .dbar-products {
+        display: flex; gap: 6px;
+        overflow-x: auto; padding-bottom: 2px;
+    }
+    .dbar-products::-webkit-scrollbar { height: 2px; }
+    .dbar-products::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+    .dbar-pill {
+        padding: 3px 10px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 100px;
+        font-size: 11px; color: #94a3b8;
+        white-space: nowrap; flex-shrink: 0;
+    }
+    .dbar-more { color: #00d4ff; border-color: rgba(0,212,255,0.2); background: rgba(0,212,255,0.06); }
+
+    /* Botones de acción */
+    .dbar-actions { display: flex; flex-direction: column; gap: 10px; }
+    .dbar-btn {
+        width: 100%; padding: 12px;
+        border: none; border-radius: 12px;
+        font-family: 'Sora', sans-serif;
+        font-size: 13px; font-weight: 700;
+        cursor: pointer; display: flex;
+        align-items: center; justify-content: center; gap: 10px;
+        transition: all .2s; letter-spacing: 0.3px;
+    }
+    .dbar-btn:disabled { opacity: .6; cursor: not-allowed; transform: none !important; }
+    .dbar-btn-primary {
+        background: linear-gradient(135deg, #00d4ff, #0ea5e9);
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(0,212,255,0.3);
+    }
+    .dbar-btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,212,255,0.4); }
+    .dbar-btn-success {
+        background: linear-gradient(135deg, #10b981, #047857);
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(16,185,129,0.25);
+    }
+    .dbar-btn-success:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(16,185,129,0.4); }
+
+    .dbar-live {
+        display: flex; align-items: center; justify-content: center; gap: 10px;
+        padding: 12px; border-radius: 14px;
+        background: rgba(16,185,129,0.08);
+        border: 1px solid rgba(16,185,129,0.2);
+        font-size: 13px; font-weight: 600; color: #10b981;
+    }
+
+    /* ══ MODAL CHAT FLOTANTE ═══════════════════════════════ */
+    .chat-modal {
+        position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+        width: 360px; height: 500px;
+        background: #0d1422;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 20px; overflow: hidden;
+        box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(16,185,129,0.1);
+        display: flex; flex-direction: column;
+        animation: chatIn .3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .chat-modal.hidden { display: none; }
+    @keyframes chatIn { from{opacity:0;transform:scale(0.85) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
+
+    .chat-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 16px; flex-shrink: 0;
+        background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(4,120,87,0.08));
+        border-bottom: 1px solid rgba(16,185,129,0.15);
+    }
+    .chat-modal-info { display: flex; align-items: center; gap: 10px; }
+    .cmi-avatar {
+        width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+        background: linear-gradient(135deg, #10b981, #047857);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; font-weight: 800; color: #fff;
+    }
+    .chat-modal-name { font-size: 14px; font-weight: 700; color: #fff; }
+    .chat-modal-status {
+        font-size: 11px; color: #10b981;
+        display: flex; align-items: center; gap: 4px;
+    }
+    .chat-modal-status::before {
+        content: ''; width: 6px; height: 6px;
+        background: #10b981; border-radius: 50%;
+        display: inline-block; animation: blink 2s infinite;
+    }
+    .chat-modal-close {
+        width: 30px; height: 30px; border-radius: 50%;
+        background: rgba(255,255,255,0.08); border: none;
+        color: #94a3b8; cursor: pointer; font-size: 14px;
+        display: flex; align-items: center; justify-content: center;
+        transition: all .2s;
+    }
+    .chat-modal-close:hover { background: rgba(239,68,68,0.2); color: #fca5a5; }
+
+    /* Mensajes */
+    .wc-messages {
+        flex: 1; overflow-y: auto; padding: 14px 12px;
+        display: flex; flex-direction: column; gap: 8px;
+        background: #090e1a; scroll-behavior: smooth;
+    }
+    .wc-messages::-webkit-scrollbar { width: 3px; }
+    .wc-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+    .wc-empty {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 12px; height: 100%;
+        text-align: center; opacity: .4;
+    }
+    .wc-empty i { font-size: 38px; color: #10b981; }
+    .wc-empty p { font-size: 12px; color: #64748b; line-height: 1.6; }
+    .wc-msg { display: flex; animation: wc-in .2s ease; }
+    @keyframes wc-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .wc-mine   { justify-content: flex-end; }
+    .wc-theirs { justify-content: flex-start; }
+    .wc-bubble {
+        max-width: 78%; padding: 9px 13px 6px;
+        border-radius: 16px; word-break: break-word;
+    }
+    .wc-mine .wc-bubble {
+        background: linear-gradient(135deg, #10b981, #047857);
+        color: #fff; border-radius: 16px 16px 4px 16px;
+        box-shadow: 0 3px 12px rgba(16,185,129,0.25);
+    }
+    .wc-theirs .wc-bubble {
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(255,255,255,0.09);
+        color: #f0f6ff; border-radius: 16px 16px 16px 4px;
+    }
+    .wc-sender { font-size: 10px; font-weight: 700; color: #00d4ff; margin-bottom: 3px; opacity: .85; }
+    .wc-text   { font-size: 13.5px; line-height: 1.5; }
+    .wc-time   { font-size: 10px; opacity: .55; text-align: right; margin-top: 4px; display: flex; align-items: center; justify-content: flex-end; gap: 3px; font-family: 'JetBrains Mono', monospace; }
+
+    /* Input */
+    .wc-input-bar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 12px; flex-shrink: 0;
+        background: rgba(255,255,255,0.02);
+        border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .wc-input {
+        flex: 1; padding: 10px 16px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 22px; color: #f0f6ff;
+        font-family: 'Sora', sans-serif; font-size: 13px; outline: none;
+        transition: all .2s;
+    }
+    .wc-input:focus { border-color: #10b981; background: rgba(16,185,129,0.06); box-shadow: 0 0 0 3px rgba(16,185,129,0.07); }
+    .wc-input::placeholder { color: #334155; }
+    .wc-send {
+        width: 40px; height: 40px; flex-shrink: 0;
+        background: linear-gradient(135deg, #10b981, #047857);
+        border: none; border-radius: 50%; color: #fff;
+        cursor: pointer; font-size: 14px;
+        display: flex; align-items: center; justify-content: center;
+        transition: all .2s;
+    }
+    .wc-send:hover { transform: scale(1.1); box-shadow: 0 4px 16px rgba(16,185,129,0.5); }
+    .wc-send:active { transform: scale(0.92); }
+
+    @media (max-width: 640px) {
+        .chat-modal { width: calc(100vw - 24px); right: 12px; bottom: 12px; height: 420px; }
+        .delivery-bar { padding: 12px 14px 16px; }
+    }
+    /* Ocultar atribución Leaflet */
+    .leaflet-control-attribution { display: none !important; }
+
+    /* ════════════════════════════════════════════
+       RESPONSIVE FIXES — OPERADOR
+       ════════════════════════════════════════════ */
+
+    /* Topbar compacto en tablet */
+    @media (max-width: 1024px) {
+        .zona-badge { display: none; }
+        .activos-lista { width: 180px; }
+    }
+
+    /* Tablet: lista más estrecha, barra inferior compacta */
+    @media (max-width: 900px) {
+        #tab-activos { height: calc(100vh - 150px); }
+        .activos-lista { width: 160px; }
+        .dbar-client { gap: 8px; }
+        .dbar-name { font-size: 13px; }
+        .dbar-total { font-size: 12px; }
+        .dbar-btn { padding: 10px; font-size: 12px; }
+    }
+
+    /* Móvil: layout vertical completo */
+    @media (max-width: 768px) {
+        /* Tab activos scroll vertical */
+        #tab-activos {
+            height: auto !important;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Layout apilado */
+        .activos-layout {
+            flex-direction: column !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* Lista horizontal deslizable */
+        .activos-lista {
+            width: 100% !important;
+            height: auto !important;
+            display: flex !important;
+            flex-direction: row !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            border-right: none !important;
+            border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+            padding: 8px !important;
+            gap: 8px !important;
+            -webkit-overflow-scrolling: touch;
+        }
+        .activos-lista .pedido-item {
+            min-width: 200px !important;
+            flex-shrink: 0 !important;
+            border-radius: 10px !important;
+            border-bottom: none !important;
+        }
+
+        /* Panel full width */
+        .activo-panel {
+            width: 100% !important;
+            overflow: visible !important;
+        }
+
+        /* delivery-view apilado */
+        .delivery-view {
+            height: auto !important;
+            min-height: unset !important;
+        }
+
+        /* Mapa altura fija en móvil */
+        .delivery-map {
+            height: 300px !important;
+            min-height: 300px !important;
+            flex: none !important;
+        }
+
+        /* FAB chat más accesible */
+        .chat-fab {
+            bottom: 12px !important;
+            right: 12px !important;
+            width: 48px !important;
+            height: 48px !important;
+            font-size: 18px !important;
+        }
+
+        /* Leyenda más pequeña */
+        .map-legend {
+            font-size: 10px !important;
+            padding: 4px 12px !important;
+            bottom: 8px !important;
+        }
+
+        /* Barra inferior compacta */
+        .delivery-bar {
+            padding: 10px 12px 12px !important;
+            gap: 8px !important;
+        }
+        .dbar-client { gap: 8px; }
+        .dbar-avatar { width: 30px; height: 30px; font-size: 12px; }
+        .dbar-name { font-size: 13px; }
+        .dbar-addr { font-size: 10px; }
+        .dbar-total { font-size: 13px; }
+        .dbar-btn { padding: 11px; font-size: 13px; border-radius: 10px; }
+
+        /* Tabs más compactos */
+        .op-tab { padding: 12px 14px; font-size: 12px; }
+
+        /* Pendientes grid 1 columna */
+        .pendientes-grid {
+            grid-template-columns: 1fr !important;
+        }
+        .tab-content { padding: 12px !important; }
+    }
+
+    /* Móvil pequeño */
+    @media (max-width: 480px) {
+        .delivery-map { height: 260px !important; min-height: 260px !important; }
+        .dbar-products { display: none; } /* Ocultar pills en pantallas muy pequeñas */
+        .op-tab span:not(.tab-badge) { display: none; }
+        .op-tab { padding: 12px 16px; }
+    }
+
+    /* ── MAGIA PARA ELIMINAR EL ESPACIO NEGRO (CORREGIDO) ── */
+    
+    /* 1. Reglas SOLO para la computadora (El mapa actúa como esponja) */
+    @media (min-width: 769px) {
+        .activo-panel { display: flex !important; flex-direction: column !important; flex: 1 !important; }
+        .delivery-view { display: flex !important; flex-direction: column !important; flex: 1 !important; height: 100% !important; }
+        .delivery-map { flex: 1 1 auto !important; min-height: 400px !important; height: auto !important; }
+        .delivery-bar { flex-shrink: 0 !important; }
+    }
+    
+    /* 2. Reglas SOLO para el celular (El mapa exige una altura estricta o se pone negro) */
+    @media (max-width: 768px) {
+        .delivery-map { 
+            height: 450px !important; /* Altura fija obligatoria para móviles */
+            min-height: 450px !important; 
+            flex: none !important; 
+        }
+        #mapaOperador { 
+            height: 100% !important; 
+            width: 100% !important; 
+            display: block !important;
+        }
+    }
+
+/* =======================================================
+       🔥 CHAT A PANTALLA COMPLETA EN MÓVIL (CORREGIDO) 🔥
+       ======================================================= */
+    @media (max-width: 768px) {
+        /* SOLO aplicamos el modo gigante cuando NO está oculto */
+        .chat-modal:not(.hidden) {
+            position: fixed !important;
+            top: 0 !important; 
+            left: 0 !important; 
+            right: 0 !important; 
+            bottom: 0 !important;
+            width: 100vw !important; 
+            max-width: 100vw !important;
+            height: 100dvh !important; 
+            max-height: 100dvh !important;
+            margin: 0 !important; 
+            border-radius: 0 !important;
+            z-index: 2147483647 !important; /* Por encima del mapa y botones */
+            background: #0d1422 !important;
+            border: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        /* Obligamos al navegador a esconderlo cuando le damos a la X */
+        .chat-modal.hidden {
+            display: none !important;
+        }
+        
+        /* Protege contra el Notch/Cámara del iPhone */
+        .chat-modal-header { 
+            padding-top: max(16px, env(safe-area-inset-top)) !important; 
+            border-radius: 0 !important; 
+        }
+        
+        /* Botón de cerrar más grande para el dedo */
+        .chat-modal-close { 
+            width: 44px !important; 
+            height: 44px !important; 
+            font-size: 20px !important; 
+        }
+        
+        /* Protege el input contra la barra inferior de iOS/Android */
+        .wc-input-bar { 
+            padding-bottom: max(16px, env(safe-area-inset-bottom)) !important; 
+        }
+    }
+    </style>
+</head>
+<body>
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <div class="logo-icon-sm"><i class="fa-solid fa-hexagon-nodes"></i></div>
+            <span class="logo-text-sm">Nexus<strong>Panel</strong></span>
+        </div>
+    </div>
+    <div class="sidebar-user">
+        <div class="user-avatar"><?= strtoupper(substr($u['nombre'],0,1)) ?></div>
+        <div class="user-info">
+            <span class="user-name"><?= htmlspecialchars($u['nombre']) ?></span>
+            <span class="user-role role-operator"><i class="fa-solid fa-user-gear"></i> Operador</span>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-section-label">Principal</div>
+        <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>Dashboard</span></a>
+        <a href="operador_pedidos.php" class="nav-item active">
+            <i class="fa-solid fa-truck"></i><span>Mis Entregas</span><div class="nav-indicator"></div>
+        </a>
+        <div class="nav-section-label">Cuenta</div>
+        <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesión</span></a>
+    </nav>
+</aside>
+
+<main class="main-content">
+    <header class="topbar">
+        <div class="topbar-left">
+            <button class="mobile-menu-btn" id="mobileMenu"><i class="fa-solid fa-bars"></i></button>
+            <div class="breadcrumb-custom">
+                <span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i>
+                <span class="active">Mis Entregas</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <div class="topbar-date" id="topbarDate"></div>
+            <div class="zona-badge"><i class="fa-solid fa-location-dot"></i> Radio: <?= $u['zona_radio'] ?? 50 ?> km</div>
+            <div class="topbar-avatar"><?= strtoupper(substr($u['nombre'],0,1)) ?></div>
+        </div>
+    </header>
+
+    <div class="content-area" style="padding:0;">
+
+        <!-- TABS -->
+        <div class="op-tabs">
+            <button class="op-tab <?= $tab==='pendientes'?'active':'' ?>" onclick="switchTab('pendientes')">
+                <i class="fa-solid fa-clock"></i> Pedidos en mi zona
+                <span class="tab-badge" id="tabBadgePendientes">...</span>
+            </button>
+            <button class="op-tab <?= $tab==='activos'?'active':'' ?>" onclick="switchTab('activos')">
+                <i class="fa-solid fa-truck"></i> Mis entregas activas
+                <span class="tab-badge" style="background:rgba(16,185,129,0.2);color:var(--success);"><?= count($misActivos) ?></span>
+            </button>
+        </div>
+
+        <!-- TAB: PENDIENTES -->
+        <div id="tab-pendientes" class="tab-content <?= $tab==='pendientes'?'':'hidden' ?>">
+            <div class="pendientes-grid" id="pendientesGrid">
+                <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text-muted);">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size:24px;"></i>
+                    <p style="margin-top:12px;">Cargando pedidos en tu zona...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: ACTIVOS -->
+        <div id="tab-activos" class="tab-content <?= $tab==='activos'?'':'hidden' ?>">
+            <?php if (empty($misActivos)): ?>
+            <div style="text-align:center;padding:60px;color:var(--text-muted);">
+                <i class="fa-solid fa-truck" style="font-size:50px;opacity:0.15;display:block;margin-bottom:16px;"></i>
+                <p>No tienes entregas activas en este momento.</p>
+                <p style="font-size:13px;margin-top:8px;">Toma un pedido de la pestaña "Pedidos en mi zona"</p>
+            </div>
+            <?php else: ?>
+            <div class="activos-layout">
+                <!-- Lista mis pedidos activos -->
+                <div class="activos-lista">
+                    <?php foreach ($misActivos as $p): ?>
+                    <a href="operador_pedidos.php?tab=activos&pedido_id=<?= $p['id'] ?>" class="pedido-item <?= $p['id']==$pedidoId?'active':'' ?>">
+                        <div class="pedido-item-header">
+                            <span class="pedido-num">#<?= $p['id'] ?></span>
+                            <span class="pedido-estado-pill" style="background:<?= $p['estado']==='en_camino'?'rgba(0,212,255,0.15)':'rgba(16,185,129,0.15)' ?>;color:<?= $p['estado']==='en_camino'?'var(--primary)':'var(--success)' ?>;border:1px solid <?= $p['estado']==='en_camino'?'rgba(0,212,255,0.3)':'rgba(16,185,129,0.3)' ?>">
+                                <?= $p['estado']==='en_camino'?'En camino':'Aceptado' ?>
+                            </span>
+                        </div>
+                        <div class="pedido-item-total"><?= htmlspecialchars($p['cli_nombre']) ?></div>
+                        <div class="pedido-item-fecha"><i class="fa-solid fa-location-dot"></i> <?= htmlspecialchars(mb_strimwidth($p['cli_dom']??'',0,35,'…')) ?></div>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
+
+                <!-- ── VISTA ENTREGA ESTILO UBER ── -->
+                <?php if ($pedidoActivo): ?>
+                <div class="delivery-view">
+
+                    <!-- MAPA — ocupa todo el ancho, altura generosa -->
+                    <div class="delivery-map">
+                        <div id="mapaOperador"></div>
+
+                        <!-- Pill de estado flotante arriba izquierda -->
+                        <div class="delivery-status-pill" id="statusPill">
+                            <?php if ($pedidoActivo['estado'] === 'en_camino'): ?>
+                            <span class="pill-dot blink"></span> Compartiendo ubicación
+                            <?php else: ?>
+                            <span class="pill-dot"></span> Pedido #<?= $pedidoActivo['id'] ?>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Leyenda mapa -->
+                        <div class="map-legend">
+                            <span>🔵 Cliente</span><span>🟢 Tú</span>
+                        </div>
+
+                        <!-- FAB Chat -->
+                        <button class="chat-fab" onclick="toggleChatModal()">
+                            <i class="fa-solid fa-comments"></i>
+                            <span class="fab-badge hidden" id="chatBadge"></span>
+                        </button>
+                    </div>
+
+                    <!-- BARRA INFERIOR: info + botones -->
+                    <div class="delivery-bar">
+
+                        <!-- Info cliente -->
+                        <div class="dbar-client">
+                            <div class="dbar-avatar"><?= strtoupper(substr($pedidoActivo['cli_nombre'],0,1)) ?></div>
+                            <div class="dbar-info">
+                                <div class="dbar-name"><?= htmlspecialchars($pedidoActivo['cli_nombre']) ?></div>
+                                <div class="dbar-addr">
+                                    <i class="fa-solid fa-location-dot"></i>
+                                    <?= htmlspecialchars(mb_strimwidth($pedidoActivo['domicilio_entrega']??$pedidoActivo['cli_dom']??'—', 0, 45, '…')) ?>
+                                </div>
+                            </div>
+                            <div class="dbar-total">$<?= number_format($pedidoActivo['total'],2) ?></div>
+                        </div>
+
+                        <!-- Productos colapsables -->
+                        <div class="dbar-products">
+                            <?php foreach (array_slice($itemsPedido,0,3) as $item): ?>
+                            <span class="dbar-pill"><?= $item['cantidad'] ?>× <?= htmlspecialchars(mb_strimwidth($item['nombre'],0,22,'…')) ?></span>
+                            <?php endforeach; ?>
+                            <?php if (count($itemsPedido) > 3): ?>
+                            <span class="dbar-pill dbar-more">+<?= count($itemsPedido)-3 ?> más</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Botones de acción -->
+                        <div class="dbar-actions">
+                            <?php if ($pedidoActivo['estado'] === 'aceptado'): ?>
+                            <button class="dbar-btn dbar-btn-primary" onclick="iniciarViaje(<?= $pedidoActivo['id'] ?>)" id="btnViaje">
+                                <i class="fa-solid fa-truck"></i>
+                                Iniciar viaje y compartir ubicación
+                            </button>
+                            <?php else: ?>
+                            <div class="dbar-live">
+                                <span class="pill-dot blink"></span>
+                                Compartiendo ubicación en tiempo real
+                            </div>
+                            <?php endif; ?>
+                            <button class="dbar-btn dbar-btn-success" onclick="marcarEntregado(<?= $pedidoActivo['id'] ?>)" id="btnEntregar">
+                                <i class="fa-solid fa-box-check"></i>
+                                Marcar como entregado
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- MODAL CHAT FLOTANTE -->
+                    <div class="chat-modal hidden" id="chatModal">
+                        <div class="chat-modal-header">
+                            <div class="chat-modal-info">
+                                <div class="cmi-avatar"><?= strtoupper(substr($pedidoActivo['cli_nombre'],0,1)) ?></div>
+                                <div>
+                                    <div class="chat-modal-name"><?= htmlspecialchars($pedidoActivo['cli_nombre']) ?></div>
+                                    <div class="chat-modal-status">En línea</div>
+                                </div>
+                            </div>
+                            <button class="chat-modal-close" onclick="toggleChatModal()">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div class="wc-messages" id="chatMensajes">
+                            <div class="wc-empty" id="chatEmpty">
+                                <i class="fa-solid fa-comments"></i>
+                                <p>Sin mensajes aún.<br>¡Saluda a tu cliente!</p>
+                            </div>
+                        </div>
+                        <div class="wc-input-bar">
+                            <input type="text" id="chatInput" class="wc-input"
+                                   placeholder="Escribe un mensaje..."
+                                   onkeydown="if(event.key==='Enter')enviarMensaje()">
+                            <button class="wc-send" onclick="enviarMensaje()">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const PEDIDO_ID     = <?= (int)$pedidoId ?>;
+const PEDIDO_ESTADO = '<?= htmlspecialchars($pedidoActivo['estado'] ?? '', ENT_QUOTES) ?>';
+const CLI_LAT       = <?= isset($pedidoActivo['cli_lat']) && $pedidoActivo['cli_lat'] ? (float)$pedidoActivo['cli_lat'] : 0 ?>;
+const CLI_LNG       = <?= isset($pedidoActivo['cli_lng']) && $pedidoActivo['cli_lng'] ? (float)$pedidoActivo['cli_lng'] : 0 ?>;
+let map = null, opMarker = null, cliMarker = null;
+let lastChatId = 0;
+let trackingInterval = null;
+let gpsErrorShown = false;
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateClock(); setInterval(updateClock, 1000);
+    document.getElementById('mobileMenu')?.addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+    cargarPendientes();
+    if (PEDIDO_ID) {
+        initMapaOperador();
+        pollChat();
+        setInterval(pollChat, 3000);
+        if (PEDIDO_ESTADO === 'en_camino') iniciarGPS();
+    }
+});
+
+// ── TABS ──────────────────────────────────────────────────
+// ── CHAT MODAL FLOTANTE ───────────────────────────────────
+function toggleChatModal() {
+    const modal = document.getElementById('chatModal');
+    const isHidden = modal.classList.contains('hidden');
+    modal.classList.toggle('hidden');
+    if (isHidden) {
+        // Abrir: limpiar badge y enfocar input
+        const badge = document.getElementById('chatBadge');
+        if (badge) { badge.textContent = '0'; badge.classList.add('hidden'); }
+        setTimeout(() => {
+            document.getElementById('chatInput')?.focus();
+            const msgs = document.getElementById('chatMensajes');
+            if (msgs) msgs.scrollTop = msgs.scrollHeight;
+        }, 50);
+    }
+}
+
+function switchTab(name) {
+    document.querySelectorAll('.op-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+    document.getElementById(`tab-${name}`).classList.remove('hidden');
+    if (name === 'pendientes') cargarPendientes();
+}
+
+// ── PEDIDOS PENDIENTES ────────────────────────────────────
+async function cargarPendientes() {
+    try {
+        const res  = await fetch('../api/pedido.php?action=pedidos_pendientes');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error('Respuesta inválida');
+        const grid = document.getElementById('pendientesGrid');
+        document.getElementById('tabBadgePendientes').textContent = data.length;
+
+        if (!data.length) {
+            grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--text-muted);">
+                <i class="fa-solid fa-check-circle" style="font-size:40px;opacity:0.2;display:block;margin-bottom:16px;color:var(--success);"></i>
+                <p>No hay pedidos pendientes en tu zona</p>
+            </div>`;
+            return;
+        }
+
+        grid.innerHTML = data.map(p => `
+            <div class="pendiente-card">
+                <div class="pc-header">
+                    <span class="pedido-num">#${p.id}</span>
+                    ${p.distancia_km !== null ? `<span class="distancia-badge"><i class="fa-solid fa-route"></i> ${p.distancia_km} km</span>` : ''}
+                </div>
+                <div class="pc-cliente">
+                    <div class="pc-avatar">${p.cliente_nombre.charAt(0).toUpperCase()}</div>
+                    <div>
+                        <strong>${p.cliente_nombre}</strong>
+                        <div style="font-size:12px;color:var(--text-muted)">${p.cli_tel||''}</div>
+                    </div>
+                </div>
+                <div class="pc-domicilio">
+                    <i class="fa-solid fa-location-dot" style="color:var(--primary)"></i>
+                    ${p.domicilio_entrega||p.cli_dom||'Sin dirección'}
+                </div>
+                <div class="pc-total">$${parseFloat(p.total).toFixed(2)} MXN</div>
+                <div class="pc-fecha">${new Date(p.created_at).toLocaleString('es-MX')}</div>
+                <button class="btn-tomar" onclick="tomarPedido(${p.id})">
+                    <i class="fa-solid fa-hand"></i> Tomar este pedido
+                </button>
+            </div>
+        `).join('');
+    } catch(e) {
+        document.getElementById('tabBadgePendientes').textContent = '!';
+    }
+}
+
+// ── TOMAR PEDIDO ──────────────────────────────────────────
+async function tomarPedido(id) {
+    if (!confirm('¿Deseas tomar este pedido?')) return;
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Tomando...';
+    try {
+        const res  = await fetch(`../api/pedido.php?action=aceptar&pedido_id=${id}`, {method:'POST'});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.success) {
+            // Pequeña pausa para que la BD confirme antes de redirigir
+            await new Promise(r => setTimeout(r, 500));
+            window.location.href = `operador_pedidos.php?tab=activos&pedido_id=${id}`;
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-hand"></i> Tomar este pedido';
+            alert('Error: ' + (data.error || 'No se pudo tomar el pedido. Puede que otro operador lo tomó primero.'));
+            cargarPendientes(); // Refrescar lista
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-hand"></i> Tomar este pedido';
+        alert('Error de conexión al tomar el pedido.');
+    }
+}
+
+// ── MAPA OPERADOR ─────────────────────────────────────────
+function initMapaOperador() {
+    const el = document.getElementById('mapaOperador'); if(!el)return;
+    map = L.map('mapaOperador');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OSM',maxZoom:19}).addTo(map);
+
+    if (CLI_LAT && CLI_LNG) {
+        const icon = L.divIcon({html:`<div style="width:32px;height:32px;background:#7c3aed;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px rgba(124,58,237,0.5);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;"><i class="fa fa-house"></i></div>`,iconSize:[32,32],iconAnchor:[16,16],className:''});
+        cliMarker = L.marker([CLI_LAT,CLI_LNG],{icon}).addTo(map).bindPopup('<strong>📦 Entregar aquí</strong>');
+        map.setView([CLI_LAT,CLI_LNG],14);
+    } else {
+        map.setView([19.4326,-99.1332],12);
+    }
+}
+
+// ── GPS OPERADOR ──────────────────────────────────────────
+function iniciarGPS() {
+    if (!navigator.geolocation) {
+        if (!gpsErrorShown) {
+            gpsErrorShown = true;
+            alert('Este dispositivo no soporta geolocalizacion. No se puede compartir ubicacion en tiempo real.');
+        }
+        return;
+    }
+
+    const enviarPosicion = () => {
+        navigator.geolocation.getCurrentPosition(pos => {
+            const lat = pos.coords.latitude, lng = pos.coords.longitude;
+            fetch(`../api/pedido.php?action=update_tracking&pedido_id=${PEDIDO_ID}`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({lat,lng})
+            });
+            // Actualizar propio marker en mapa
+            if (map) {
+                const icon = L.divIcon({html:`<div style="width:36px;height:36px;background:linear-gradient(135deg,#10b981,#059669);border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 4px 15px rgba(16,185,129,0.4);"></div>`,iconSize:[36,36],iconAnchor:[18,36],className:''});
+                if (!opMarker) {
+                    opMarker = L.marker([lat,lng],{icon}).addTo(map).bindPopup('<strong>Tu ubicacion</strong>');
+                } else opMarker.setLatLng([lat,lng]);
+                if (CLI_LAT && CLI_LNG) map.fitBounds([[lat,lng],[CLI_LAT,CLI_LNG]],{padding:[30,30]});
+            }
+        }, err => {
+            if (gpsErrorShown) return;
+            gpsErrorShown = true;
+            let msg = 'No se pudo obtener la ubicacion del repartidor.';
+            if (err.code === 1) msg = 'Permiso de ubicacion denegado. Activalo para compartir en tiempo real.';
+            if (err.code === 2) msg = 'Ubicacion no disponible. Intenta en una zona con mejor senal.';
+            if (err.code === 3) msg = 'Tiempo de espera agotado al leer GPS.';
+            alert(msg);
+        }, {enableHighAccuracy:true, timeout:10000, maximumAge:0});
+    };
+
+    enviarPosicion();
+    trackingInterval = setInterval(() => {
+        enviarPosicion();
+    }, 4000);
+}
+
+async function iniciarViaje(id) {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Iniciando...';
+    try {
+        const res  = await fetch(`../api/pedido.php?action=iniciar_viaje&pedido_id=${id}`, {method:'POST'});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.success) {
+            iniciarGPS();
+            const badge = document.createElement('div');
+            badge.className = 'viaje-activo-badge';
+            badge.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Compartiendo ubicación en tiempo real <span style="width:8px;height:8px;background:#ef4444;border-radius:50%;display:inline-block;animation:blink 1s infinite;margin-left:6px;"></span>';
+            btn.replaceWith(badge);
+        } else {
+            throw new Error(data.error || 'No se pudo iniciar el viaje');
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-truck"></i> Iniciar viaje — Compartir ubicación';
+        alert('Error: ' + e.message);
+    }
+}
+
+async function marcarEntregado(id) {
+    if (!confirm('¿Confirmas que el pedido fue entregado?')) return;
+    clearInterval(trackingInterval);
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Procesando...';
+    try {
+        const res  = await fetch(`../api/pedido.php?action=entregar&pedido_id=${id}`, {method:'POST'});
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        if (data.success) {
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> ¡Entregado!';
+            btn.style.background = 'var(--success)';
+            await new Promise(r => setTimeout(r, 800));
+            window.location.href = 'operador_pedidos.php?tab=activos';
+        } else {
+            throw new Error(data.error || 'No se pudo marcar como entregado');
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-box-check"></i> Marcar como entregado';
+        alert('Error: ' + e.message);
+    }
+}
+
+// ── CHAT ──────────────────────────────────────────────────
+async function pollChat() {
+    if (!PEDIDO_ID || !document.getElementById('chatMensajes')) return;
+    try {
+        const res  = await fetch(`../api/pedido.php?action=chat_get&pedido_id=${PEDIDO_ID}&desde=${lastChatId}`);
+        if (!res.ok) return;
+        const msgs = await res.json();
+        if (!Array.isArray(msgs)) return;
+        if (!msgs.length) return;
+        const cont = document.getElementById('chatMensajes');
+        // Remove empty state on first message
+        const emptyState = cont.querySelector('.chat-empty-state');
+        if (emptyState && msgs.length) emptyState.remove();
+        // Remove empty state on first message
+        if (msgs.length) {
+            const empty = document.getElementById('chatEmpty');
+            if (empty) empty.remove();
+        }
+
+        msgs.forEach(m => {
+            lastChatId = Math.max(lastChatId, m.id);
+            const isMine = m.rol === 'operador' || m.rol === 'administrador';
+            const div = document.createElement('div');
+            div.className = `wc-msg ${isMine ? 'wc-mine' : 'wc-theirs'}`;
+            const time = new Date(m.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+            div.innerHTML = `
+                <div class="wc-bubble">
+                    ${!isMine ? `<div class="wc-sender">${m.nombre}</div>` : ''}
+                    <div class="wc-text">${m.mensaje.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
+                    <div class="wc-time">${time} ${isMine ? '<i class="fa-solid fa-check-double" style="font-size:10px;opacity:0.7"></i>' : ''}</div>
+                </div>
+            `;
+            cont.appendChild(div);
+        });
+        cont.scrollTop = cont.scrollHeight;
+
+        // Badge si el modal está cerrado
+        const modal = document.getElementById('chatModal');
+        if (modal?.classList.contains('hidden') && msgs.length) {
+            const badge = document.getElementById('chatBadge');
+            if (badge) {
+                badge.textContent = (parseInt(badge.textContent) || 0) + msgs.length;
+                badge.classList.remove('hidden');
+            }
+        }
+    } catch(e) {}
+}
+
+async function enviarMensaje() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim(); if (!msg) return;
+    input.value = '';
+    await fetch(`../api/pedido.php?action=chat_send&pedido_id=${PEDIDO_ID}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({mensaje:msg})
+    });
+    pollChat();
+}
+
+function updateClock() {
+    const el = document.getElementById('topbarDate'); if(!el)return;
+    const now = new Date();
+    el.textContent = now.toLocaleDateString('es-MX',{weekday:'short',day:'2-digit',month:'short'})+' · '+now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+}
+</script>
+</body>
+</html>
+
+
+
