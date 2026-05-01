@@ -503,47 +503,6 @@ $productoSolicitado = (int)($_GET['producto'] ?? 0);
                 <?php endforeach; ?>
             </div>
 
-            <div class="ml-grid" id="productosGrid">
-                <?php foreach ($productosInicio as $i => $p): ?>
-                <?php
-                    $categoriaSlug = trim((string)($p['categoria_slug_ui'] ?? 'sin-categoria'));
-                    $subcategoriaSlug = trim((string)($p['subcategoria_slug_ui'] ?? tiendaSlug((string)($p['subcategoria_ui'] ?? 'General'))));
-                    if ($subcategoriaSlug === '') $subcategoriaSlug = 'general';
-                    $imagenUrl = !empty($p['imagen']) ? ('../uploads/productos/' . $p['imagen']) : '';
-                    $categoriaVisible = (string)($p['categoria_nombre_ui'] ?? 'Pollo');
-                    $subcategoriaVisible = (string)($p['subcategoria_ui'] ?? 'General');
-                ?>
-                <div class="ml-card"
-                     id="producto-card-<?= (int)$p['id'] ?>"
-                     data-id="<?= (int)$p['id'] ?>"
-                     data-nombre="<?= htmlspecialchars(strtolower($p['nombre']), ENT_QUOTES) ?>"
-                     data-nombre-raw="<?= htmlspecialchars($p['nombre'], ENT_QUOTES) ?>"
-                     data-imagen="<?= htmlspecialchars($imagenUrl, ENT_QUOTES) ?>"
-                     data-categoria="<?= htmlspecialchars($categoriaSlug) ?>"
-                     data-subcategoria="<?= htmlspecialchars($subcategoriaSlug) ?>"
-                     style="animation-delay:<?= $i*0.04 ?>s">
-                    <div class="ml-img-wrap">
-                        <?php if (!empty($p['imagen'])): ?>
-                        <img src="../uploads/productos/<?= htmlspecialchars($p['imagen']) ?>" alt="<?= htmlspecialchars($p['nombre']) ?>" class="ml-img" loading="lazy">
-                        <?php else: ?>
-                        <div class="ml-img-placeholder"><i class="fa-solid fa-box-open"></i></div>
-                        <?php endif; ?>
-                        <span class="ml-badge-stock">Disponible</span>
-                    </div>
-                    <div class="ml-info">
-                        <div class="ml-codigo"><?= htmlspecialchars($p['codigo']) ?></div>
-                        <div class="ml-envio" style="margin-top:-2px;"><i class="fa-solid fa-tags"></i> <?= htmlspecialchars($categoriaVisible) ?></div>
-                        <div class="ml-envio" style="margin-top:-4px;"><i class="fa-solid fa-layer-group"></i> <?= htmlspecialchars($subcategoriaVisible) ?></div>
-                        <div class="ml-nombre"><?= htmlspecialchars($p['nombre']) ?></div>
-                        <div class="ml-actions">
-                            <button type="button" class="ml-btn-agregar" onclick="abrirModalCantidad(this)">
-                                <i class="fa-solid fa-cart-plus"></i> Agregar producto
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
         </section>
         <?php else: ?>
         <div class="tienda-header">

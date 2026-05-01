@@ -231,6 +231,29 @@ body {
     font-size: 18px;
 }
 
+.nexus-sidebar-hotspot {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 42px;
+    z-index: 2200;
+    border: 0;
+    background: transparent;
+    color: rgba(203, 213, 225, 0.32);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 4px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+.nexus-sidebar-hotspot:hover,
+.nexus-sidebar-hotspot:focus {
+    color: rgba(125, 211, 252, 0.75);
+    outline: none;
+}
+
 .topbar-right { display: flex; align-items: center; gap: 16px; }
 .topbar-date {
     font-family: var(--font-mono);
@@ -336,7 +359,7 @@ svg {
 }
 
 .data-table {
-    min-width: 860px;
+    min-width: 760px;
 }
 
 /* Tablets and down */
@@ -747,11 +770,25 @@ svg {
     }
     .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
     .main-content { margin-left: 0; }
-    .mobile-menu-btn { display: block; }
+    .mobile-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 130;
+        pointer-events: auto !important;
+    }
+    .nexus-sidebar-hotspot {
+        display: inline-block;
+    }
     .content-area { padding: 16px; }
     .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
     .topbar-date { display: none; }
-    .topbar { padding: 0 16px; }
+    .topbar {
+        padding: 0 16px;
+        position: sticky;
+        z-index: 120;
+    }
     .breadcrumb-custom { font-size: 12px; }
     body.sidebar-open { overflow: hidden; }
     body.sidebar-open::before {
@@ -763,10 +800,6 @@ svg {
     }
     .sidebar { z-index: 110; }
     .main-content { position: relative; margin-left: 0; z-index: 1; }
-    body.sidebar-open .main-content {
-        pointer-events: none !important;
-        user-select: none !important;
-    }
     body.sidebar-open .sidebar,
     body.sidebar-open .sidebar * {
         pointer-events: auto !important;
@@ -829,3 +862,847 @@ svg {
 
 
 
+
+/* =============================================
+   THEME: PALETTE (PREMIUM CORPORATIVE)
+   ============================================= */
+body[data-theme="palette"] {
+    --primary: #002D62; /* Navy Blue */
+    --primary-dim: rgba(0, 45, 98, 0.08);
+    --accent: #4CAF50; /* Green */
+    --bg-dark: #f4f7fa; /* White/Light Grey main background */
+    --bg-sidebar: #002D62; /* Navy Sidebar */
+    --bg-card: #ffffff;
+    --bg-card-hover: #f8fafc;
+    --bg-input: #ffffff;
+    --border: #e2e8f0;
+    --border-hover: #002D62;
+    --text-primary: #1e293b;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    background: var(--bg-dark) !important;
+}
+
+body[data-theme="palette"]::before { display: none; }
+
+/* ---- SIDEBAR PREMIUM (NAVY) ---- */
+body[data-theme="palette"] .sidebar {
+    background: linear-gradient(180deg, #002D62 0%, #001a3d 100%);
+    border-right: none;
+    box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+}
+body[data-theme="palette"] .sidebar::before { background: linear-gradient(180deg, rgba(76, 175, 80, 0.1) 0%, transparent 100%); }
+body[data-theme="palette"] .sidebar-header { border-bottom: 1px solid rgba(255,255,255,0.08); }
+body[data-theme="palette"] .logo-text-sm { color: #ffffff; }
+body[data-theme="palette"] .logo-text-sm strong { color: var(--accent); }
+body[data-theme="palette"] .logo-icon-sm { background: #ffffff; color: var(--primary); }
+body[data-theme="palette"] .user-avatar { background: var(--accent); color: #ffffff; }
+body[data-theme="palette"] .user-name { color: #ffffff; }
+body[data-theme="palette"] .user-role { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.1); }
+body[data-theme="palette"] .nav-section-label { color: rgba(255,255,255,0.4); }
+body[data-theme="palette"] .nav-item { color: rgba(255,255,255,0.7); }
+body[data-theme="palette"] .nav-item:hover { background: rgba(255,255,255,0.05); color: #ffffff; }
+body[data-theme="palette"] .nav-item.active { background: var(--accent); color: #ffffff; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); }
+body[data-theme="palette"] .nav-indicator { background: #ffffff; box-shadow: 0 0 10px #ffffff; }
+
+/* ---- TOPBAR (WHITE) ---- */
+body[data-theme="palette"] .topbar {
+    background: rgba(255,255,255,0.9);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+}
+body[data-theme="palette"] .breadcrumb-custom { color: var(--text-muted); }
+body[data-theme="palette"] .breadcrumb-custom .active { color: var(--primary); }
+body[data-theme="palette"] .topbar-date { color: var(--text-dim); }
+body[data-theme="palette"] .topbar-btn { background: #f8fafc; border: 1px solid var(--border); color: var(--text-muted); }
+body[data-theme="palette"] .topbar-btn:hover { border-color: var(--primary); color: var(--primary); }
+body[data-theme="palette"] .notif-count { background: var(--accent); color: #fff; }
+
+/* ---- CARDS & PANELS ---- */
+body[data-theme="palette"] .card-panel,
+body[data-theme="palette"] .stat-card,
+body[data-theme="palette"] .mini-card,
+body[data-theme="palette"] .clientes-lista,
+body[data-theme="palette"] .mapa-sidebar {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+body[data-theme="palette"] .stat-card:hover { border-color: var(--accent); transform: translateY(-5px); }
+body[data-theme="palette"] .stat-card::before { background: var(--accent); }
+body[data-theme="palette"] .stat-card-icon { background: rgba(76, 175, 80, 0.1); color: var(--accent); }
+body[data-theme="palette"] .stat-card-number { color: var(--primary); }
+
+/* ---- TABLES ---- */
+body[data-theme="palette"] .data-table thead tr { background: #f8fafc; }
+body[data-theme="palette"] .data-table th { color: var(--primary); border-bottom: 2px solid var(--border); }
+body[data-theme="palette"] .data-table tbody tr:hover { background: rgba(76, 175, 80, 0.02); }
+
+/* ---- BUTTONS ---- */
+body[data-theme="palette"] .btn-primary,
+body[data-theme="palette"] .btn-primary-custom,
+body[data-theme="palette"] .btn-ruta {
+    background: var(--accent);
+    color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.2);
+}
+body[data-theme="palette"] .btn-primary:hover,
+body[data-theme="palette"] .btn-primary-custom:hover { background: #388E3C; transform: scale(1.02); }
+
+/* ---- MAPA ---- */
+body[data-theme="palette"] .mapa-user-avatar { background: var(--primary); }
+body[data-theme="palette"] .mapa-user-name { color: var(--primary); }
+body[data-theme="palette"] .mapa-user-item.active { border-left: 4px solid var(--accent); background: rgba(76, 175, 80, 0.05); }
+
+/* ---- FORMS ---- */
+body[data-theme="palette"] input:focus, 
+body[data-theme="palette"] select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+/* ---- SEARCH & FILTERS (PALETTE THEME) ---- */
+body[data-theme="palette"] .tienda-filter-shell {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 10px 30px rgba(0, 45, 98, 0.05);
+}
+body[data-theme="palette"] .tienda-filter-block + .tienda-filter-block {
+    border-left: 1px solid #f1f5f9;
+}
+body[data-theme="palette"] .tienda-search-modern {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    color: #1e293b !important;
+}
+body[data-theme="palette"] .tienda-search-modern:focus {
+    background: #ffffff !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 4px rgba(0, 45, 98, 0.05) !important;
+}
+body[data-theme="palette"] .filter-label {
+    color: var(--primary);
+    opacity: 0.8;
+}
+body[data-theme="palette"] .filtro-pill {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+}
+body[data-theme="palette"] .filtro-pill:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: #f8fafc;
+}
+body[data-theme="palette"] .filtro-pill.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 45, 98, 0.2);
+}
+
+/* Estilo Blanco y Negro para Inputs en Palette */
+body[data-theme="palette"] .search-box-high-contrast {
+    background: #ffffff !important;
+    border: 2px solid #000000 !important;
+    color: #000000 !important;
+    font-weight: 600;
+}
+
+/* Admin Search & Filters (Palette) */
+body[data-theme="palette"] .prod-search-form input,
+body[data-theme="palette"] .prod-search-form select {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: var(--text-primary);
+    border-radius: 10px;
+    padding: 8px 12px;
+}
+body[data-theme="palette"] .prod-search-form input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+/* Mapa Search (Palette) */
+body[data-theme="palette"] .mapa-search {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+body[data-theme="palette"] .mapa-search input {
+    background: transparent;
+    color: var(--text-primary);
+}
+body[data-theme="palette"] .mapa-search i {
+    color: var(--text-dim);
+}
+body[data-theme="palette"] .mapa-search:focus-within {
+    border-color: var(--primary);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px var(--primary-dim);
+}
+
+/* ============================================================
+   PALETTE THEME - PREMIUM CORPORATE OVERRIDES (Navy, Green, White)
+   ============================================================ */
+
+body[data-theme="palette"] {
+    --primary: #002D62;      /* Navy Blue Principal */
+    --accent: #4CAF50;       /* Green Accent */
+    --bg-dark: #f8fafc;
+    --bg-sidebar: #002D62;   /* Sidebar en Navy */
+    --bg-card: #ffffff;      /* Cards en Blanco Puro */
+    --bg-input: #f1f5f9;
+    --border: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    --text-light: #f8fafc;
+}
+
+/* Fix for Sidebar items in Palette */
+body[data-theme="palette"] .sidebar {
+    background: var(--bg-sidebar);
+}
+body[data-theme="palette"] .nav-item {
+    color: rgba(255, 255, 255, 0.7);
+}
+body[data-theme="palette"] .nav-item:hover,
+body[data-theme="palette"] .nav-item.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+body[data-theme="palette"] .nav-indicator {
+    background: var(--accent);
+}
+
+/* Fix for Topbar in Palette */
+body[data-theme="palette"] .topbar {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid #e2e8f0;
+}
+body[data-theme="palette"] .topbar-btn {
+    color: var(--primary);
+    background: #f1f5f9;
+}
+body[data-theme="palette"] .topbar-date {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* ---- CHAT & MESSAGES OVERRIDES ---- */
+body[data-theme="palette"] .op-chat-panel,
+body[data-theme="palette"] .wc-messages,
+body[data-theme="palette"] .chat-mensajes,
+body[data-theme="palette"] .op-chat-mensajes {
+    background: #ffffff !important;
+}
+
+body[data-theme="palette"] .op-panel-header,
+body[data-theme="palette"] .mc-header,
+body[data-theme="palette"] .chat-input-wrap,
+body[data-theme="palette"] .op-chat-input-wrap,
+body[data-theme="palette"] .wc-input-bar {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+body[data-theme="palette"] .msg-bubble,
+body[data-theme="palette"] .wc-bubble {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+body[data-theme="palette"] .theirs .msg-bubble,
+body[data-theme="palette"] .wc-theirs .wc-bubble {
+    background: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .mine .msg-bubble,
+body[data-theme="palette"] .wc-mine .wc-bubble {
+    background: linear-gradient(135deg, #4CAF50, #388E3C) !important;
+    color: #ffffff !important;
+}
+
+body[data-theme="palette"] .op-chat-input,
+body[data-theme="palette"] .wc-input,
+body[data-theme="palette"] .chat-input {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .op-chat-input:focus,
+body[data-theme="palette"] .wc-input:focus,
+body[data-theme="palette"] .chat-input:focus {
+    border-color: #4CAF50 !important;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1) !important;
+}
+
+/* ---- MAP OVERRIDES ---- */
+body[data-theme="palette"] .leaflet-container {
+    background: #f1f5f9 !important;
+}
+body[data-theme="palette"] .leaflet-tile {
+    filter: none !important; /* Standard Light Map */
+}
+body[data-theme="palette"] .leaflet-popup-content-wrapper {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1) !important;
+}
+body[data-theme="palette"] .leaflet-popup-tip {
+    background: #ffffff !important;
+}
+body[data-theme="palette"] .popup-detail strong {
+    color: var(--primary) !important;
+}
+
+/* Floating Info Panels in Palette */
+body[data-theme="palette"] .mapa-info-panel,
+body[data-theme="palette"] .panel-noti-dropdown {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.1) !important;
+}
+body[data-theme="palette"] .info-name,
+body[data-theme="palette"] .info-row strong,
+body[data-theme="palette"] .panel-noti-item strong {
+    color: #0f172a !important;
+}
+body[data-theme="palette"] .panel-noti-header {
+    background: #f8fafc;
+    color: #0f172a !important;
+}
+body[data-theme="palette"] .panel-noti-item {
+    background: #ffffff;
+    border-color: #f1f5f9;
+}
+body[data-theme="palette"] .panel-noti-item:hover {
+    background: #f8fafc;
+}
+
+/* Icons fix */
+body[data-theme="palette"] .mapa-sidebar-header i,
+body[data-theme="palette"] .op-panel-title i,
+body[data-theme="palette"] .di-icon,
+body[data-theme="palette"] .info-row i {
+    color: var(--primary) !important;
+}
+
+/* Welcome banners & Stats */
+body[data-theme="palette"] .welcome-banner {
+    background: linear-gradient(135deg, #002D62, #004d99);
+    color: #ffffff;
+}
+body[data-theme="palette"] .stat-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+body[data-theme="palette"] .stat-card-number {
+    color: var(--primary);
+}
+
+/* ---- UNIVERSAL COMPONENT PATCH (FOR PALETTE THEME) ---- */
+
+body[data-theme="palette"] .msg-list,
+body[data-theme="palette"] .msg-chat,
+body[data-theme="palette"] .msg-body,
+body[data-theme="palette"] .help-layout > div {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+}
+
+body[data-theme="palette"] .msg-card,
+body[data-theme="palette"] .help-contact-card {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+}
+
+body[data-theme="palette"] .msg-card.active,
+body[data-theme="palette"] .help-contact-card.active {
+    background: rgba(0, 45, 98, 0.05) !important;
+    border-color: var(--primary) !important;
+}
+
+body[data-theme="palette"] .msg-card strong,
+body[data-theme="palette"] .msg-card small,
+body[data-theme="palette"] #chatHeadTitle,
+body[data-theme="palette"] #helpChatHead {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .msg-theirs,
+body[data-theme="palette"] .theirs .msg-bubble {
+    background: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .msg-mine,
+body[data-theme="palette"] .mine .msg-bubble {
+    background: linear-gradient(135deg, #4CAF50, #388E3C) !important;
+    border-color: #2E7D32 !important;
+    color: #ffffff !important;
+}
+
+/* Map Popup Labels */
+body[data-theme="palette"] .popup-name {
+    color: #002D62 !important;
+}
+body[data-theme="palette"] .popup-detail {
+    color: #64748b !important;
+}
+
+/* Fix for any black boxes in the dashboard */
+body[data-theme="palette"] [style*="background:rgba(8,18,35"],
+body[data-theme="palette"] [style*="background:rgba(10,23,42"],
+body[data-theme="palette"] [style*="background:#070f1f"],
+body[data-theme="palette"] [style*="background:#0b1120"] {
+    background: #ffffff !important;
+}
+
+body[data-theme="palette"] [style*="color:#f1f5f9"],
+body[data-theme="palette"] [style*="color:#eef6ff"] {
+    color: #0f172a !important;
+}
+
+/* Additional Icon fixes */
+body[data-theme="palette"] .fa-solid, 
+body[data-theme="palette"] .fa-regular {
+    /* Only apply if they are not inside a primary/success button */
+}
+
+/* Ensure data-tables are clean */
+body[data-theme="palette"] .data-table thead th {
+    background: #f8fafc;
+    color: var(--primary);
+    border-bottom: 2px solid var(--primary);
+}
+
+/* Fix for help-contacts scrollbar and container */
+body[data-theme="palette"] .help-contacts {
+    background: #ffffff;
+}
+
+/* Role Badge Color Refinement for Palette */
+body[data-theme="palette"] .role-admin {
+    background: rgba(0, 45, 98, 0.1) !important;
+    color: #002D62 !important;
+    border: 1px solid rgba(0, 45, 98, 0.2);
+}
+body[data-theme="palette"] .role-operator {
+    background: rgba(76, 175, 80, 0.1) !important;
+    color: #2E7D32 !important;
+    border: 1px solid rgba(76, 175, 80, 0.2);
+}
+body[data-theme="palette"] .role-client {
+    background: rgba(100, 116, 139, 0.1) !important;
+    color: #475569 !important;
+    border: 1px solid rgba(100, 116, 139, 0.2);
+}
+
+/* Fix for icons inside cards */
+body[data-theme="palette"] .stat-card-icon {
+    background: rgba(0, 45, 98, 0.05) !important;
+    color: var(--primary) !important;
+}
+
+/* ---- TEXT VISIBILITY FIXES (PALETTE) ---- */
+body[data-theme="palette"] .msg-card strong,
+body[data-theme="palette"] .help-contact-card strong,
+body[data-theme="palette"] .panel-noti-item strong,
+body[data-theme="palette"] .mapa-user-name,
+body[data-theme="palette"] .di-nombre,
+body[data-theme="palette"] .pc-cliente strong,
+body[data-theme="palette"] .ci-row strong {
+    color: #0f172a !important; /* Force dark navy/black for names */
+}
+
+body[data-theme="palette"] .msg-card small,
+body[data-theme="palette"] .help-contact-card small,
+body[data-theme="palette"] .mapa-user-addr,
+body[data-theme="palette"] .pc-domicilio,
+body[data-theme="palette"] .ci-row span {
+    color: #64748b !important; /* Force muted grey for secondary text */
+}
+
+/* Fix for any hardcoded white text on light backgrounds */
+body[data-theme="palette"] [style*="color:#eef6ff"],
+body[data-theme="palette"] [style*="color:#f1f5f9"],
+body[data-theme="palette"] [style*="color:#ffffff"]:not(.nav-item):not(.btn-primary-custom):not(.welcome-banner *) {
+    /* This is a broad stroke, let's be more careful */
+}
+
+body[data-theme="palette"] .msg-chat .msg-head div[style*="color:#f1f5f9"] {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .msg-body div[style*="color:var(--text-muted)"] {
+    color: #64748b !important;
+}
+
+body[data-theme="palette"] .msg-bubble div[style*="color:#67e8f9"],
+body[data-theme="palette"] .msg-bubble div[style*="color:#c7d2fe"] {
+    color: var(--primary) !important; /* Fix sender names in chat bubbles */
+}
+
+/* Modal and Panel headers */
+body[data-theme="palette"] .modal-header h5,
+body[data-theme="palette"] .panel-title,
+body[data-theme="palette"] .panel-header strong {
+    color: #002D62 !important;
+}
+
+/* ---- FINAL TEXT VISIBILITY & COMPONENT PATCH (PALETTE) ---- */
+body[data-theme="palette"] .op-noti-header,
+body[data-theme="palette"] .op-noti-item strong,
+body[data-theme="palette"] .op-thread-title,
+body[data-theme="palette"] .dbar-name,
+body[data-theme="palette"] .em-title,
+body[data-theme="palette"] .chat-modal-name,
+body[data-theme="palette"] .modal-header h4,
+body[data-theme="palette"] .modal-header h5,
+body[data-theme="palette"] .pc-total,
+body[data-theme="palette"] .ci-row strong {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .pc-fecha,
+body[data-theme="palette"] .ci-row span,
+body[data-theme="palette"] .op-panel-sub,
+body[data-theme="palette"] .notif-count.hidden + span {
+    color: #64748b !important;
+}
+
+/* Modal Inputs & General Inputs */
+body[data-theme="palette"] .modal-input,
+body[data-theme="palette"] .em-input,
+body[data-theme="palette"] .checkout-input,
+body[data-theme="palette"] .tienda-search {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .em-btn-cancel {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #e2e8f0;
+}
+
+/* Fix for sidebar text disappearing if background is light */
+body[data-theme="palette"] .sidebar .user-name {
+    color: #ffffff !important; /* Sidebar is Navy, so white is correct */
+}
+
+/* Leaflet Popup fix */
+body[data-theme="palette"] .leaflet-popup-content-wrapper {
+    color: #0f172a !important;
+}
+body[data-theme="palette"] .popup-name {
+    color: #002D62 !important;
+}
+
+/* Fix for any white text in the help/chat sections */
+body[data-theme="palette"] .help-contact-card div[style*="font-weight:700"] {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .help-contact-card div[style*="color:var(--text-muted)"] {
+    color: #64748b !important;
+}
+
+/* Force dark text for specifically identified hardcoded white tags */
+body[data-theme="palette"] .msg-head div[style*="color:#f1f5f9"] {
+    color: #0f172a !important;
+}
+
+/* ---- DELIVERY BAR & OPERADOR FIXES (PALETTE) ---- */
+body[data-theme="palette"] .delivery-bar {
+    background: #ffffff !important;
+    border-top: 1px solid #e2e8f0 !important;
+    box-shadow: 0 -10px 30px rgba(0, 45, 98, 0.05);
+}
+
+body[data-theme="palette"] .dbar-name,
+body[data-theme="palette"] .dbar-addr,
+body[data-theme="palette"] .dbar-total,
+body[data-theme="palette"] .dbar-products strong {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .dbar-pill-product {
+    background: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .map-legend,
+body[data-theme="palette"] .map-label-floating {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #002D62 !important;
+    border: 1px solid rgba(0, 45, 98, 0.2) !important;
+    backdrop-filter: blur(8px);
+}
+
+/* Fix for specific map pill labels in screenshot */
+body[data-theme="palette"] .leaflet-overlay-pane [style*="background:rgba(6,10,18"],
+body[data-theme="palette"] [style*="background:rgba(6,10,18"],
+body[data-theme="palette"] [style*="background:rgba(0,0,0,0.7"] {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #002D62 !important;
+}
+
+body[data-theme="palette"] .dbar-btn-secondary {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+    border: 1px solid #cbd5e1;
+}
+
+/* Fix for the large black section at the bottom of the screenshot */
+body[data-theme="palette"] .delivery-view {
+    background: #f8fafc !important;
+}
+
+/* Ensuring the active tab in "Mis Entregas" is white/navy */
+body[data-theme="palette"] .op-tab {
+    background: transparent;
+    color: #64748b;
+}
+body[data-theme="palette"] .op-tab.active {
+    color: #002D62;
+    background: #ffffff;
+    border-bottom: 3px solid #002D62;
+}
+
+/* ---- ADDITIONAL COMPONENT FIXES (PALETTE) ---- */
+body[data-theme="palette"] .mc-map-overlay,
+body[data-theme="palette"] .mc-header,
+body[data-theme="palette"] .op-panel-header {
+    background: rgba(255, 255, 255, 0.9) !important;
+    color: #002D62 !important;
+    border: 1px solid rgba(0, 45, 98, 0.1) !important;
+}
+
+body[data-theme="palette"] .mc-card {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+}
+
+/* Fix for icons and text color in help/delivery bars */
+body[data-theme="palette"] .dbar-btn i {
+    color: inherit !important;
+}
+
+body[data-theme="palette"] .dbar-avatar {
+    background: var(--primary) !important;
+    color: #ffffff !important;
+}
+
+/* ---- QUEUE CARD & DASHBOARD FIXES (PALETTE) ---- */
+body[data-theme="palette"] .queue-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 10px 30px rgba(0, 45, 98, 0.05);
+}
+
+body[data-theme="palette"] .queue-card-title {
+    color: #0f172a !important;
+}
+
+body[data-theme="palette"] .queue-card-row {
+    color: #64748b !important;
+}
+
+body[data-theme="palette"] .queue-card-row i {
+    color: var(--primary) !important;
+}
+
+body[data-theme="palette"] .queue-folio {
+    color: var(--primary) !important;
+}
+
+body[data-theme="palette"] .op-tab-content-area {
+    background: #f8fafc;
+}
+
+body[data-theme="palette"] .empty-state-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    color: #64748b;
+}
+
+/* Fix for any remaining black boxes in dashboard/operador */
+body[data-theme="palette"] [style*="background:linear-gradient(165deg"],
+body[data-theme="palette"] [style*="background:rgba(11,24,48"] {
+    background: #ffffff !important;
+}
+
+body[data-theme="palette"] .op-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+}
+
+/* ---- BROAD GRADIENT OVERRIDE FOR PALETTE ---- */
+body[data-theme="palette"] .card-panel,
+body[data-theme="palette"] .op-card,
+body[data-theme="palette"] .stat-card {
+    background: #ffffff !important;
+    background-image: none !important;
+}
+
+body[data-theme="palette"] .btn-chip-primary,
+body[data-theme="palette"] .btn-chip-wa {
+    /* Maintain gradients for buttons as they are 'accents' */
+}
+
+/* ---- PEDIDOS PAGE & FILTERS FIXES (PALETTE) ---- */
+body[data-theme="palette"] .toolbar-grid {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+body[data-theme="palette"] .modal-select,
+body[data-theme="palette"] .modal-input,
+body[data-theme="palette"] .prod-search-form select,
+body[data-theme="palette"] .form-select {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 16px 12px !important;
+}
+
+body[data-theme="palette"] .data-table thead th {
+    background: #f1f5f9 !important;
+    color: #002D62 !important;
+    font-weight: 700 !important;
+    border-bottom: 2px solid #002D62 !important;
+    text-transform: uppercase;
+    font-size: 11px;
+}
+
+body[data-theme="palette"] .pedido-row td {
+    border-bottom: 1px solid #f1f5f9;
+}
+
+body[data-theme="palette"] .pedido-row small[style*="color:#d8e6ff"] {
+    color: #475569 !important;
+}
+
+body[data-theme="palette"] .btn-secondary-custom {
+    background: #002D62 !important; /* Navy */
+    color: #ffffff !important;
+    border: 1px solid #002D62 !important;
+}
+
+body[data-theme="palette"] .btn-secondary-custom:hover {
+    background: #004d99 !important;
+}
+
+/* Fix for the "Warning" text color if it appears */
+body[data-theme="palette"] .pedido-row {
+    color: #0f172a !important;
+}
+
+/* ---- STATUS BADGE OVERRIDES (PALETTE) ---- */
+body[data-theme="palette"] .status-badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+body[data-theme="palette"] .badge-en_camino,
+body[data-theme="palette"] .badge-en-camino {
+    background: rgba(245, 158, 11, 0.1) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+body[data-theme="palette"] .badge-entregado {
+    background: rgba(16, 185, 129, 0.1) !important;
+    color: #10b981 !important;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+body[data-theme="palette"] .badge-pendiente {
+    background: rgba(0, 45, 98, 0.05) !important;
+    color: #002D62 !important;
+    border: 1px solid rgba(0, 45, 98, 0.1);
+}
+
+body[data-theme="palette"] .badge-cancelado {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* ---- FILTER INPUT & SELECT CLEANUP (PALETTE) ---- */
+body[data-theme="palette"] .modal-input,
+body[data-theme="palette"] .prod-search-form input {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #cbd5e1 !important;
+    background-image: none !important; /* No arrows for inputs */
+    padding-right: 12px !important;
+}
+
+body[data-theme="palette"] .modal-select,
+body[data-theme="palette"] .form-select,
+body[data-theme="palette"] .prod-search-form select {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #cbd5e1 !important;
+    appearance: none !important; /* Remove browser default arrow */
+    -webkit-appearance: none !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 16px 12px !important;
+    padding-right: 2.5rem !important;
+}
+
+/* Placeholder color in black theme */
+body[data-theme="palette"] .modal-input::placeholder,
+body[data-theme="palette"] .prod-search-form input::placeholder {
+    color: #64748b !important;
+}
+
+/* Specific fix for the screenshot labels */
+body[data-theme="palette"] #pedidoFilterQ,
+body[data-theme="palette"] #pedidoFilterEstado,
+body[data-theme="palette"] #pedidoFilterCliente,
+body[data-theme="palette"] #pedidoFilterFecha {
+    color: #000000 !important;
+}
+
+@media (max-width: 768px) {
+    .content-area { padding: 12px !important; }
+    .card-panel { border-radius: 12px; }
+    .panel-header { gap: 10px; flex-wrap: wrap; }
+    .table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -4px;
+        padding: 0 4px 6px;
+    }
+    .data-table { min-width: 680px !important; }
+    .data-table th,
+    .data-table td {
+        font-size: 12px !important;
+        padding: 10px 8px !important;
+    }
+}

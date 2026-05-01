@@ -24,12 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $email  = trim($_POST['email'] ?? '');
         $pass   = trim($_POST['password'] ?? '');
         $rol    = $_POST['rol'] ?? 'operador';
+        $camionGrande = isset($_POST['camion_grande']) ? 1 : 0;
+        $capacidadPedidos = (int)($_POST['capacidad_pedidos'] ?? 5);
+        if ($capacidadPedidos < 1) $capacidadPedidos = 1;
+        if ($capacidadPedidos > 20) $capacidadPedidos = 20;
 
         if ($nombre && $email && $pass) {
             try {
                 $hash = password_hash($pass, PASSWORD_DEFAULT);
-                $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol) VALUES (?,?,?,?)")
-                    ->execute([$nombre, $email, $hash, $rol]);
+                $pdo->prepare("INSERT INTO usuarios (nombre, email, password, rol, camion_grande, capacidad_pedidos) VALUES (?,?,?,?,?,?)")
+                    ->execute([$nombre, $email, $hash, $rol, $camionGrande, $capacidadPedidos]);
                 $msg = "Usuario '$nombre' creado correctamente.";
             } catch (PDOException $e) {
                 $error = 'Error: El correo ya existe.';
@@ -79,6 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $edadRaw  = trim($_POST['edad'] ?? '');
         $rol      = $_POST['rol'] ?? 'cliente';
         $password = trim($_POST['password'] ?? '');
+        $camionGrande = isset($_POST['camion_grande']) ? 1 : 0;
+        $capacidadPedidos = (int)($_POST['capacidad_pedidos'] ?? 5);
+        if ($capacidadPedidos < 1) $capacidadPedidos = 1;
+        if ($capacidadPedidos > 20) $capacidadPedidos = 20;
         $edad     = ($edadRaw === '') ? null : (int)$edadRaw;
 
         if (!$target) {
@@ -98,9 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                         throw new RuntimeException('La nueva contrasena debe tener al menos 6 caracteres.');
                     }
                     $hash = password_hash($password, PASSWORD_DEFAULT);
-                    $pdo->prepare("\n                        UPDATE usuarios\n                        SET nombre=?, email=?, telefono=?, domicilio=?, edad=?, rol=?, password=?\n                        WHERE id=?\n                    ")->execute([$nombre, $email, $telefono ?: null, $domicilio ?: null, $edad, $rol, $hash, $id]);
+                    $pdo->prepare("\n                        UPDATE usuarios\n                        SET nombre=?, email=?, telefono=?, domicilio=?, edad=?, rol=?, camion_grande=?, capacidad_pedidos=?, password=?\n                        WHERE id=?\n                    ")->execute([$nombre, $email, $telefono ?: null, $domicilio ?: null, $edad, $rol, $camionGrande, $capacidadPedidos, $hash, $id]);
                 } else {
-                    $pdo->prepare("\n                        UPDATE usuarios\n                        SET nombre=?, email=?, telefono=?, domicilio=?, edad=?, rol=?\n                        WHERE id=?\n                    ")->execute([$nombre, $email, $telefono ?: null, $domicilio ?: null, $edad, $rol, $id]);
+                    $pdo->prepare("\n                        UPDATE usuarios\n                        SET nombre=?, email=?, telefono=?, domicilio=?, edad=?, rol=?, camion_grande=?, capacidad_pedidos=?\n                        WHERE id=?\n                    ")->execute([$nombre, $email, $telefono ?: null, $domicilio ?: null, $edad, $rol, $camionGrande, $capacidadPedidos, $id]);
                 }
                 $msg = 'Usuario actualizado correctamente.';
             } catch (RuntimeException $ex) {
@@ -270,7 +278,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
         }
     </style>
 </head>
-<body>
+<body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo"><div class="logo-icon-sm"><i class="fa-solid fa-hexagon-nodes"></i></div><span class="logo-text-sm">Nexus<strong>Panel</strong></span></div>
@@ -291,6 +299,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a><div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <div class="nav-section-label">Cuenta</div>
+        
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
 </aside>
@@ -302,6 +311,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span>Admin</span><i class="fa-solid fa-chevron-right"></i><span class="active">Usuarios</span></div>
         </div>
         <div class="topbar-right">
+            <button id="btnToggleTheme" class="topbar-btn" title="Cambiar Paleta" onclick="toggleTheme()"><i class="fa-solid fa-palette"></i></button>
             <div class="topbar-date" id="topbarDate"></div>
             <div class="dropdown">
                 <button class="topbar-btn" type="button" id="panelNotiBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Notificaciones">
@@ -420,7 +430,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
                                         <input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="<?= $u['id'] ?>">
                                         <button type="submit" class="action-btn toggle-btn" title="<?= $u['activo']?'Desactivar':'Activar' ?>" <?= ($u['id'] == $_SESSION['usuario_id'] || $u['rol'] === 'administrador') ? 'disabled style="opacity:.45;cursor:not-allowed;"' : '' ?>><i class="fa-solid <?= $u['activo']?'fa-toggle-on':'fa-toggle-off' ?>"></i></button>
                                     </form>
-                                    <button type="button" class="action-btn" title="Editar" style="color:var(--primary);" data-bs-toggle="modal" data-bs-target="#modalEditar" data-id="<?= $u['id'] ?>" data-nombre="<?= htmlspecialchars($u['nombre'], ENT_QUOTES) ?>" data-email="<?= htmlspecialchars($u['email'], ENT_QUOTES) ?>" data-telefono="<?= htmlspecialchars($u['telefono'] ?? '', ENT_QUOTES) ?>" data-domicilio="<?= htmlspecialchars($u['domicilio'] ?? '', ENT_QUOTES) ?>" data-edad="<?= (int)($u['edad'] ?? 0) ?>" data-rol="<?= htmlspecialchars($u['rol'], ENT_QUOTES) ?>"><i class="fa-solid fa-pen"></i></button>
+                                    <button type="button" class="action-btn" title="Editar" style="color:var(--primary);" data-bs-toggle="modal" data-bs-target="#modalEditar" data-id="<?= $u['id'] ?>" data-nombre="<?= htmlspecialchars($u['nombre'], ENT_QUOTES) ?>" data-email="<?= htmlspecialchars($u['email'], ENT_QUOTES) ?>" data-telefono="<?= htmlspecialchars($u['telefono'] ?? '', ENT_QUOTES) ?>" data-domicilio="<?= htmlspecialchars($u['domicilio'] ?? '', ENT_QUOTES) ?>" data-edad="<?= (int)($u['edad'] ?? 0) ?>" data-rol="<?= htmlspecialchars($u['rol'], ENT_QUOTES) ?>" data-camion-grande="<?= (int)($u['camion_grande'] ?? 0) ?>" data-capacidad-pedidos="<?= (int)($u['capacidad_pedidos'] ?? 5) ?>"><i class="fa-solid fa-pen"></i></button>
                                     <?php if ($u['rol'] === 'cliente' && $u['lat'] !== null && $u['lng'] !== null): ?>
                                     <a class="action-btn maps-btn" target="_blank" rel="noopener" title="Ver en Maps" href="https://www.google.com/maps?q=<?= rawurlencode((string)$u['lat'] . ',' . (string)$u['lng']) ?>"><i class="fa-solid fa-map-location-dot"></i></a>
                                     <?php endif; ?>
@@ -440,13 +450,13 @@ $usuariosMapa = array_values(array_map(static function ($u) {
 
 <div class="modal fade modal-dark" id="modalCrear" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" style="font-weight:600;"><i class="fa-solid fa-user-plus" style="color:var(--primary);margin-right:10px;"></i>Nuevo Usuario</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <form method="POST"><input type="hidden" name="action" value="crear"><div class="modal-body" style="padding:24px;display:flex;flex-direction:column;gap:18px;"><div><label>Nombre completo</label><input type="text" name="nombre" class="modal-input" required></div><div><label>Correo electronico</label><input type="email" name="email" class="modal-input" required></div><div><label>Contrasena</label><input type="password" name="password" class="modal-input" required minlength="6"></div><div><label>Rol</label><select name="rol" class="modal-select"><option value="operador">Operador</option><option value="administrador">Administrador</option><option value="cliente">Cliente</option></select></div></div><div class="modal-footer" style="padding:16px 24px;gap:10px;"><button type="button" class="btn-secondary-custom" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn-primary-custom"><i class="fa-solid fa-check"></i> Crear usuario</button></div></form>
+        <form method="POST"><input type="hidden" name="action" value="crear"><div class="modal-body" style="padding:24px;display:flex;flex-direction:column;gap:18px;"><div><label>Nombre completo</label><input type="text" name="nombre" class="modal-input" required></div><div><label>Correo electronico</label><input type="email" name="email" class="modal-input" required></div><div><label>Contrasena</label><input type="password" name="password" class="modal-input" required minlength="6"></div><div><label>Rol</label><select name="rol" class="modal-select"><option value="operador">Operador</option><option value="administrador">Administrador</option><option value="cliente">Cliente</option></select></div><div><label>Capacidad maxima de pedidos simultaneos</label><input type="number" name="capacidad_pedidos" class="modal-input" min="1" max="20" value="5"></div><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" name="camion_grande" value="1"> Camion grande (puede llevar mas de 5 pedidos)</label></div><div class="modal-footer" style="padding:16px 24px;gap:10px;"><button type="button" class="btn-secondary-custom" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn-primary-custom"><i class="fa-solid fa-check"></i> Crear usuario</button></div></form>
     </div></div>
 </div>
 
 <div class="modal fade modal-dark" id="modalEditar" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" style="font-weight:600;"><i class="fa-solid fa-user-pen" style="color:var(--primary);margin-right:10px;"></i>Editar Usuario</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <form method="POST"><input type="hidden" name="action" value="editar"><input type="hidden" name="id" id="edit_id"><div class="modal-body" style="padding:24px;display:flex;flex-direction:column;gap:18px;"><div><label>Nombre completo</label><input type="text" name="nombre" id="edit_nombre" class="modal-input" required></div><div><label>Correo electronico</label><input type="email" name="email" id="edit_email" class="modal-input" required></div><div><label>Telefono</label><input type="text" name="telefono" id="edit_telefono" class="modal-input"></div><div><label>Edad</label><input type="number" min="0" max="120" name="edad" id="edit_edad" class="modal-input"></div><div><label>Domicilio</label><input type="text" name="domicilio" id="edit_domicilio" class="modal-input"></div><div><label>Rol</label><select name="rol" id="edit_rol" class="modal-select"><option value="cliente">Cliente</option><option value="operador">Operador</option><option value="administrador">Administrador</option></select></div><div><label>Nueva contrasena (opcional)</label><input type="password" name="password" class="modal-input" minlength="6"></div></div><div class="modal-footer" style="padding:16px 24px;gap:10px;"><button type="button" class="btn-secondary-custom" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn-primary-custom"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button></div></form>
+        <form method="POST"><input type="hidden" name="action" value="editar"><input type="hidden" name="id" id="edit_id"><div class="modal-body" style="padding:24px;display:flex;flex-direction:column;gap:18px;"><div><label>Nombre completo</label><input type="text" name="nombre" id="edit_nombre" class="modal-input" required></div><div><label>Correo electronico</label><input type="email" name="email" id="edit_email" class="modal-input" required></div><div><label>Telefono</label><input type="text" name="telefono" id="edit_telefono" class="modal-input"></div><div><label>Edad</label><input type="number" min="0" max="120" name="edad" id="edit_edad" class="modal-input"></div><div><label>Domicilio</label><input type="text" name="domicilio" id="edit_domicilio" class="modal-input"></div><div><label>Rol</label><select name="rol" id="edit_rol" class="modal-select"><option value="cliente">Cliente</option><option value="operador">Operador</option><option value="administrador">Administrador</option></select></div><div><label>Capacidad maxima de pedidos simultaneos</label><input type="number" name="capacidad_pedidos" id="edit_capacidad_pedidos" class="modal-input" min="1" max="20" value="5"></div><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" name="camion_grande" id="edit_camion_grande" value="1"> Camion grande (puede llevar mas de 5 pedidos)</label><div><label>Nueva contrasena (opcional)</label><input type="password" name="password" class="modal-input" minlength="6"></div></div><div class="modal-footer" style="padding:16px 24px;gap:10px;"><button type="button" class="btn-secondary-custom" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn-primary-custom"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button></div></form>
     </div></div>
 </div>
 
@@ -518,6 +528,8 @@ modalEditar?.addEventListener('show.bs.modal', (ev) => {
     document.getElementById('edit_domicilio').value = btn.getAttribute('data-domicilio') || '';
     document.getElementById('edit_edad').value = btn.getAttribute('data-edad') || '';
     document.getElementById('edit_rol').value = btn.getAttribute('data-rol') || 'cliente';
+    document.getElementById('edit_capacidad_pedidos').value = btn.getAttribute('data-capacidad-pedidos') || '5';
+    document.getElementById('edit_camion_grande').checked = (btn.getAttribute('data-camion-grande') === '1');
 });
 const clientesFilter = document.getElementById('clientesFilter');
 clientesFilter?.addEventListener('input', () => {
@@ -568,6 +580,11 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
+
+
+
+
 
 
 

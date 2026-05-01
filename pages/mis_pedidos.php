@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireAuth();
@@ -124,7 +124,7 @@ if (!empty($itemsPedido)) {
        NEXUSPANEL CLIENTE: LAYOUT BASE, MAPA Y CHAT FLOTANTE
        ============================================================================== */
     
-    /* â”€â”€ Layout Principal â”€â”€ */
+    /* ── Layout Principal ── */
     .detalle-grid { 
         display: flex; gap: 20px; align-items: stretch; margin-top: 20px; 
         height: calc(100vh - 280px); min-height: 500px;
@@ -135,7 +135,7 @@ if (!empty($itemsPedido)) {
     .detalle-info::-webkit-scrollbar { width: 4px; }
     .detalle-info::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-    /* â”€â”€ Contenedor del Mapa (La Esponja) â”€â”€ */
+    /* ── Contenedor del Mapa (La Esponja) ── */
     .mapa-wrap { 
         flex: 1; display: flex; flex-direction: column; position: relative;
         border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08);
@@ -143,7 +143,7 @@ if (!empty($itemsPedido)) {
     }
     #trackingMapa { width: 100%; height: 100%; flex: 1; display: block !important; }
 
-    /* â”€â”€ Textos flotantes del mapa (EN VIVO) â”€â”€ */
+    /* ── Textos flotantes del mapa (EN VIVO) ── */
     .mapa-legend {
         position: absolute; top: 16px; left: 16px; z-index: 1000;
         display: flex; flex-direction: column; gap: 6px;
@@ -154,7 +154,7 @@ if (!empty($itemsPedido)) {
     .live-badge { display: inline-flex; align-items: center; gap: 6px; color: #ef4444; font-weight: 700; font-family: var(--font-mono); }
     .blink-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: blink 1s infinite; }
 
-    /* â”€â”€ FAB Chat flotante (Cliente) â”€â”€ */
+    /* ── FAB Chat flotante (Cliente) ── */
     .chat-fab {
         position: absolute; bottom: 20px; right: 20px; z-index: 1000;
         display: flex; align-items: center; gap: 10px;
@@ -168,7 +168,7 @@ if (!empty($itemsPedido)) {
         font-size: 11px; margin-left: -4px;
     }
 
-    /* â”€â”€ Modal del Chat (Cliente) â”€â”€ */
+    /* ── Modal del Chat (Cliente) ── */
     .chat-modal {
         position: absolute; bottom: 80px; right: 20px; z-index: 1001;
         width: 340px; height: 450px; background: #0d1422;
@@ -176,7 +176,7 @@ if (!empty($itemsPedido)) {
         display: flex; flex-direction: column; overflow: hidden;
         box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     }
-    /* Â¡Clave para que no se vea siempre abierto! */
+    /* ¡Clave para que no se vea siempre abierto! */
     .chat-modal.hidden { display: none !important; }
     
     .chat-modal-header {
@@ -192,7 +192,7 @@ if (!empty($itemsPedido)) {
     .wc-send { width: 36px; height: 36px; border-radius: 50%; background: var(--primary); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;}
 
     /* ==============================================================================
-       RESPONSIVE CLIENTE (MÃ“VIL)
+       RESPONSIVE CLIENTE (MÓVIL)
        ============================================================================== */
     @media (max-width: 900px) {
         .pedidos-layout { flex-direction: column !important; height: auto !important; overflow: auto !important; }
@@ -211,7 +211,7 @@ if (!empty($itemsPedido)) {
     }
 
     @media (max-width: 768px) {
-        /* Chat Pantalla Completa MÃ³vil (Solo cuando NO estÃ¡ oculto) */
+        /* Chat Pantalla Completa Móvil (Solo cuando NO está oculto) */
         .chat-modal:not(.hidden) {
             position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
             width: 100vw !important; max-width: 100vw !important; height: 100dvh !important; max-height: 100dvh !important;
@@ -222,10 +222,10 @@ if (!empty($itemsPedido)) {
         .wc-input-bar { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
         .chat-modal-close { width: 44px; height: 44px; font-size: 20px; }
     }
-    /* â”€â”€ CUANDO NO HAY MAPA (PEDIDOS ENTREGADOS) â”€â”€ */
-    /* Este es el contenedor que reemplaza al mapa cuando el pedido ya se entregÃ³ */
+    /* ── CUANDO NO HAY MAPA (PEDIDOS ENTREGADOS) ── */
+    /* Este es el contenedor que reemplaza al mapa cuando el pedido ya se entregó */
     .chat-fab-standalone {
-        flex: 1; /* ActÃºa como esponja y absorbe la pantalla negra */
+        flex: 1; /* Actúa como esponja y absorbe la pantalla negra */
         display: flex;
         align-items: center; 
         justify-content: center;
@@ -236,7 +236,7 @@ if (!empty($itemsPedido)) {
         margin-top: 10px;
     }
     
-    /* El botÃ³n grande para chatear con el operador del pedido entregado */
+    /* El botón grande para chatear con el operador del pedido entregado */
     .chat-fab-inline {
         display: flex; align-items: center; gap: 10px;
         padding: 14px 28px;
@@ -537,6 +537,18 @@ if (!empty($itemsPedido)) {
     }
     /* Override final movil: Mis Pedidos sin layout roto */
     @media (max-width: 768px) {
+        .topbar,
+        .topbar-left,
+        .mobile-menu-btn {
+            position: relative !important;
+            z-index: 5005 !important;
+            pointer-events: auto !important;
+        }
+        .mobile-menu-btn {
+            touch-action: manipulation;
+            min-width: 42px;
+            min-height: 42px;
+        }
         .content-area {
             padding: 0 0 14px !important;
         }
@@ -613,7 +625,7 @@ if (!empty($itemsPedido)) {
     }
     </style>
 </head>
-<body>
+<body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo">
@@ -634,6 +646,7 @@ if (!empty($itemsPedido)) {
         <a href="tienda.php?vista=catalogo" class="nav-item"><i class="fa-solid fa-store"></i><span>Catalogo</span></a>
         <a href="mis_pedidos.php" class="nav-item active"><i class="fa-solid fa-box"></i><span>Mis Pedidos</span><div class="nav-indicator"></div></a>
         <div class="nav-section-label">Cuenta</div>
+        
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
 </aside>
@@ -649,6 +662,7 @@ if (!empty($itemsPedido)) {
             </div>
         </div>
         <div class="topbar-right">
+            <button id="btnToggleTheme" class="topbar-btn" title="Cambiar Paleta" onclick="toggleTheme()"><i class="fa-solid fa-palette"></i></button>
             <div class="topbar-date" id="topbarDate"></div>
         </div>
     </header>
@@ -873,7 +887,7 @@ if (!empty($itemsPedido)) {
                 <div class="rating-hero">
                     <div class="rating-label">Experiencia de entrega</div>
                     <h3><i class="fa-solid fa-star"></i> Califica tu entrega</h3>
-                    <p>Tu pedido ya fue entregado. Cuéntanos qué tal fue tu experiencia.</p>
+                    <p>Tu pedido ya fue entregado. Cu�ntanos qu� tal fue tu experiencia.</p>
                     <div class="rating-stars-preview" id="ratingStarsPreview" aria-hidden="true">
                         <i class="fa-solid fa-star" data-star="1"></i>
                         <i class="fa-solid fa-star" data-star="2"></i>
@@ -966,7 +980,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initPedidosSearch();
     const mobileMenuBtn = document.getElementById('mobileMenu');
     const side = document.getElementById('sidebar');
-    mobileMenuBtn?.addEventListener('click', () => {
+    mobileMenuBtn?.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+    }, { passive: false });
+    mobileMenuBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         side.classList.toggle('open');
         document.body.classList.toggle('sidebar-open', side.classList.contains('open'));
         scheduleTrackingMapResize(200);
@@ -1066,7 +1085,7 @@ function lockRatingForm() {
     if (thanks) thanks.style.display = 'block';
 }
 
-// â”€â”€ MAPA TRACKING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MAPA TRACKING ─────────────────────────────────────────
 function initTrackingMap() {
     map = L.map('trackingMapa');
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OSM',maxZoom:19}).addTo(map);
@@ -1105,7 +1124,7 @@ async function pollTracking() {
     } catch(e) {}
 }
 
-// â”€â”€ CHAT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── CHAT ──────────────────────────────────────────────────
 function toggleChatModal() {
     const modal = document.getElementById('chatModal');
     if (!modal) return;
@@ -1359,7 +1378,7 @@ async function revocarLinkViaje(btn, pedidoId) {
 }
 
 async function solicitarCancelacionCliente(pedidoId) {
-    const seguro = window.confirm('¿Seguro que quieres cancelar este pedido?');
+    const seguro = window.confirm('�Seguro que quieres cancelar este pedido?');
     if (!seguro) return;
     const motivo = window.prompt('Escribe el motivo de cancelacion:');
     if (!motivo || !motivo.trim()) {
@@ -1444,8 +1463,13 @@ function updateClock() {
 
 
 </script>
+<script src='../assets/js/dashboard.js'></script>
 </body>
 </html>
+
+
+
+
 
 
 
