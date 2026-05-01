@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $stOp = $pdo->prepare("
-                SELECT id, nombre, lat, lng, activo
+                SELECT id, nombre, lat, lng, activo, COALESCE(capacidad_pedidos,5) AS capacidad_pedidos
                 FROM usuarios
                 WHERE id = ? AND rol = 'operador'
                 LIMIT 1
@@ -71,11 +71,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new RuntimeException('El operador seleccionado no esta disponible.');
             }
 
+            $capacidadOperador = (int)($op['capacidad_pedidos'] ?? 5);
+            if ($capacidadOperador < 1) $capacidadOperador = 5;
             $stCarga = $pdo->prepare("SELECT COUNT(*) FROM pedidos WHERE operador_id = ? AND estado IN ('pendiente','aceptado','en_camino')");
             $stCarga->execute([$operadorId]);
             $cargaActiva = (int)$stCarga->fetchColumn();
-            if ($cargaActiva >= 5) {
-                throw new RuntimeException('Operador no disponible: ya tiene 5 pedidos activos.');
+            if ($cargaActiva >= $capacidadOperador) {
+                throw new RuntimeException('Operador no disponible: ya tiene su capacidad maxima de pedidos activos.');
             }
 
             $dist = distanciaPedidoKm(
@@ -466,7 +468,9 @@ foreach ($pedidos as $pp) {
         );
         $withinRange = $dist !== null && $dist <= 6.0;
         $activos = (int)($op['pedidos_activos'] ?? 0);
-        $disponible = $activos < 5;
+        $capacidad = (int)($op['capacidad_pedidos'] ?? 5);
+        if ($capacidad < 1) $capacidad = 5;
+        $disponible = $activos < $capacidad;
         $tmp[] = [
             'id' => (int)$op['id'],
             'nombre' => (string)$op['nombre'],
@@ -474,6 +478,8 @@ foreach ($pedidos as $pp) {
             'distancia_km' => $dist !== null ? round($dist, 2) : null,
             'within_range' => $withinRange,
             'pedidos_activos' => $activos,
+            'capacidad_pedidos' => $capacidad,
+            'camion_grande' => (int)($op['camion_grande'] ?? 0),
             'disponible' => $disponible
         ];
     }
@@ -623,17 +629,89 @@ foreach ($pedidos as $pp) {
         .panel-noti-item strong { display: block; font-size: 13px; color: #fff; }
         .panel-noti-item small { display: block; color: var(--text-muted); margin-top: 2px; font-size: 11px; }
         @media (max-width: 1280px) { .toolbar-grid { grid-template-columns: repeat(3,minmax(150px,1fr)); } }
-        @media (max-width: 900px) { .toolbar-grid { grid-template-columns: 1fr 1fr; } .data-table{min-width:920px;} }
+        @media (max-width: 900px) { .toolbar-grid { grid-template-columns: 1fr 1fr; } .pedidos-main-table{min-width:920px;} }
         @media (max-width: 640px) { .toolbar-grid { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
             .content-area { padding: 12px !important; }
             .toolbar-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
-            .table-wrapper { margin: 0 -6px; padding: 0 6px; overflow-x: auto; }
-            .data-table { min-width: 760px !important; }
+            .table-wrapper { margin: 0; padding: 0; overflow-x: visible; }
+            .pedidos-main-table { min-width: 100% !important; }
             .btn-table { min-height: 38px; padding: 0 10px; }
-            .data-table th, .data-table td { font-size: 12px !important; padding: 11px 8px !important; }
+            .pedidos-main-table th, .pedidos-main-table td { font-size: 12px !important; padding: 11px 8px !important; }
             .panel-title { font-size: 18px !important; }
             .panel-subtitle { font-size: 13px !important; }
+
+            .pedidos-main-table thead { display: none; }
+            .pedidos-main-table tbody { display: grid; gap: 10px; }
+            .pedidos-main-table .pedido-row {
+                display: block;
+                border: 1px solid rgba(59,130,246,.45);
+                border-radius: 14px;
+                background: linear-gradient(180deg, rgba(9,18,38,.96) 0%, rgba(6,14,30,.96) 100%);
+                padding: 12px;
+                box-shadow:
+                    0 10px 24px rgba(2, 8, 23, .42),
+                    inset 0 0 0 1px rgba(147, 197, 253, .08);
+                margin-bottom: 12px;
+                position: relative;
+                overflow: hidden;
+            }
+            .pedidos-main-table .pedido-row::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 2px;
+                background: linear-gradient(90deg, rgba(14,165,233,.95), rgba(59,130,246,.95), rgba(56,189,248,.85));
+            }
+            .pedidos-main-table .pedido-row td {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 10px;
+                width: 100%;
+                border-bottom: 1px dashed rgba(148,163,184,.2);
+                padding: 8px 0 !important;
+                white-space: normal;
+                word-break: break-word;
+            }
+            .pedidos-main-table .pedido-row td:last-child { border-bottom: 0; }
+            .pedidos-main-table .pedido-row td:first-child {
+                padding-top: 6px !important;
+            }
+            .pedidos-main-table .pedido-row td::before {
+                content: attr(data-label);
+                color: #7dd3fc;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: .03em;
+                text-transform: uppercase;
+                min-width: 100px;
+                flex-shrink: 0;
+            }
+            .pedidos-main-table .pedido-row .mini-form {
+                width: 100%;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            .pedidos-main-table .pedido-row .mini-form .modal-select,
+            .pedidos-main-table .pedido-row .mini-form .btn-table {
+                width: 100%;
+            }
+            .pedidos-main-table .pedido-row .d-flex {
+                width: 100%;
+                display: grid !important;
+                grid-template-columns: 1fr;
+                gap: 8px !important;
+            }
+            .pedidos-main-table .pedido-row .btn-table,
+            .pedidos-main-table .pedido-row .operador-asignado {
+                width: 100%;
+                justify-content: center;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -737,7 +815,7 @@ foreach ($pedidos as $pp) {
                     <input type="hidden" name="action" value="resolver_cancelacion_solicitada">
                     <input type="hidden" name="solicitud_id" value="<?= (int)$sc['id'] ?>">
                     <div style="font-size:12px;color:#fecaca;min-width:320px;">
-                        <strong>#<?= (int)$sc['pedido_id'] ?></strong> ·
+                        <strong>#<?= (int)$sc['pedido_id'] ?></strong> ï¿½
                         <?= $sc['solicitado_por'] === 'cliente' ? 'Cliente' : 'Operador' ?>:
                         <?= htmlspecialchars((string)($sc['solicitado_por'] === 'cliente' ? $sc['cliente_nombre'] : $sc['operador_nombre'])) ?><br>
                         Motivo: <?= htmlspecialchars((string)$sc['motivo']) ?>
@@ -750,7 +828,7 @@ foreach ($pedidos as $pp) {
             </div>
             <?php endif; ?>
             <div class="table-wrapper">
-                <table class="data-table">
+                <table class="data-table pedidos-main-table">
                     <thead>
                     <tr>
                         <th>Pedido</th>
@@ -768,28 +846,28 @@ foreach ($pedidos as $pp) {
                     <tbody>
                     <?php foreach ($pedidos as $p): ?>
                         <tr class="pedido-row">
-                            <td>
+                            <td data-label="Pedido">
                                 <strong>#<?= htmlspecialchars($p['folio_hex'] ?: strtoupper(dechex((int)$p['id']))) ?></strong><br>
                                 <small style="color:var(--text-muted);"><?= (int)$p['total_items'] ?> unidad(es)</small>
                             </td>
-                            <td><?= htmlspecialchars($p['created_at']) ?></td>
-                            <td><small style="color:#d8e6ff;"><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
-                            <td>
+                            <td data-label="Fecha"><?= htmlspecialchars($p['created_at']) ?></td>
+                            <td data-label="Resumen productos"><small style="color:#d8e6ff;"><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
+                            <td data-label="Cliente">
                                 <strong><?= htmlspecialchars($p['cliente_nombre']) ?></strong><br>
                                 <small><?= htmlspecialchars($p['cliente_email']) ?></small>
                             </td>
-                            <td><span class="status-badge badge-<?= htmlspecialchars($p['estado']) ?>"><?= htmlspecialchars($p['estado']) ?></span></td>
-                            <td>
+                            <td data-label="Estatus"><span class="status-badge badge-<?= htmlspecialchars($p['estado']) ?>"><?= htmlspecialchars($p['estado']) ?></span></td>
+                            <td data-label="Operador">
                                 <?php if (!empty($p['operador_nombre'])): ?>
                                     <span class="operador-asignado"><i class="fa-solid fa-user-check"></i> <?= htmlspecialchars((string)$p['operador_nombre']) ?></span>
                                 <?php else: ?>
                                     <span style="color:var(--text-muted);font-size:12px;">Sin asignar</span>
                                 <?php endif; ?>
                             </td>
-                            <td>
+                            <td data-label="Calificacion">
                                 <?php $cal = $calificacionMap[(int)$p['id']] ?? null; ?>
                                 <?php if ($cal): ?>
-                                    <span style="color:#fbbf24;font-weight:700;"><?= str_repeat('?', max(1, min(5, (int)$cal['estrellas']))) ?></span>
+                                    <span style="color:#fbbf24;font-weight:700;"><?= str_repeat('&#9733;', max(1, min(5, (int)$cal['estrellas']))) ?></span>
                                     <?php if (!empty($cal['comentario'])): ?>
                                     <div style="font-size:11px;color:var(--text-muted);max-width:180px;white-space:normal;"><?= htmlspecialchars((string)$cal['comentario']) ?></div>
                                     <?php endif; ?>
@@ -797,7 +875,7 @@ foreach ($pedidos as $pp) {
                                     <span style="color:var(--text-muted);font-size:12px;">Sin calificar</span>
                                 <?php endif; ?>
                             </td>
-<td>
+<td data-label="Asignar">
                                 <?php if (($p['estado'] ?? '') === 'pendiente'): ?>
                                     <button
                                         type="button"
@@ -810,7 +888,7 @@ foreach ($pedidos as $pp) {
                                     <span style="color:var(--text-muted);font-size:12px;">No aplica</span>
                                 <?php endif; ?>
                             </td>
-                            <td>
+                            <td data-label="Estado">
                                 <form method="post" class="mini-form js-form-estado">
                                     <input type="hidden" name="action" value="estado">
                                     <input type="hidden" name="pedido_id" value="<?= (int)$p['id'] ?>">
@@ -822,7 +900,7 @@ foreach ($pedidos as $pp) {
                                     <button class="btn-primary-custom btn-table" type="submit">Aplicar</button>
                                 </form>
                             </td>
-                            <td>
+                            <td data-label="Historial">
                                 <div class="d-flex gap-2 flex-wrap">
                                 <a href="pedidos.php?historial=<?= (int)$p['id'] ?>#detalle-historial" class="btn-secondary-custom btn-table">
                                     <i class="fa-solid fa-clock-rotate-left"></i> Ver
@@ -1091,7 +1169,7 @@ function renderListaOperadores(pedidoId, filtro = '') {
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span class="op-dist">${op.distancia_km !== null ? Number(op.distancia_km).toFixed(2) + ' km' : 'Sin ubicacion'}</span>
-                ${op.disponible ? '<span class="op-status-ok">Disponible</span>' : '<span class="op-status-busy">No disponible (5 activos)</span>'}
+                ${op.disponible ? '<span class="op-status-ok">Disponible</span>' : `<span class="op-status-busy">No disponible (${op.pedidos_activos}/${op.capacidad_pedidos} activos)</span>`}
                 ${op.within_range ? '' : '<span class="op-out">Fuera de 6 km</span>'}
                 <button type="button" class="btn-primary-custom btn-op-select" data-op-id="${op.id}" ${op.disponible ? '' : 'disabled style="opacity:.45;cursor:not-allowed;"'}>Seleccionar</button>
             </div>
@@ -1110,8 +1188,8 @@ function renderListaOperadores(pedidoId, filtro = '') {
             document.getElementById('asignarAllowOutOfRange').value = String(allowOutRange);
             document.getElementById('confirmarAsignacionText').textContent =
                 allowOutRange
-                    ? `¿Asignar este pedido a ${op.nombre} fuera del rango de 6 km?`
-                    : `¿Estas seguro de que deseas asignar este pedido a ${op.nombre}?`;
+                    ? `Asignar este pedido a ${op.nombre} fuera del rango de 6 km?`
+                    : `Estas seguro de que deseas asignar este pedido a ${op.nombre}?`;
             modalSeleccionarOperador.hide();
             setTimeout(() => modalConfirmarAsignacion.show(), 120);
         });

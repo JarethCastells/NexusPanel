@@ -262,8 +262,34 @@ $movs = $pdo->query("
         @media (max-width: 900px) { .toolbar { grid-template-columns: 1fr; } }
         @media (max-width: 768px) {
             .toolbar { grid-template-columns: 1fr !important; gap: 8px !important; }
-            .table-wrapper { margin: 0 -6px; padding: 0 6px; }
-            .data-table { min-width: 760px !important; }
+            .table-wrapper { margin: 0; padding: 0; overflow: visible; }
+            .data-table { width: 100% !important; min-width: 0 !important; border-collapse: separate; border-spacing: 0 10px; }
+            .data-table thead { display: none; }
+            .data-table tbody tr {
+                display: block;
+                background: rgba(10, 20, 40, 0.95);
+                border: 1px solid rgba(148, 163, 184, .24);
+                border-radius: 12px;
+                padding: 10px 12px;
+            }
+            .data-table tbody td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 10px;
+                border: 0 !important;
+                padding: 7px 0 !important;
+                text-align: right;
+            }
+            .data-table tbody td::before {
+                content: attr(data-label);
+                font-size: 11px;
+                color: #9ab0d0;
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+                text-align: left;
+            }
             .stats-grid { grid-template-columns: 1fr !important; gap: 10px !important; }
             .card-panel { border-radius: 12px; }
             .panel-header { padding: 14px 14px !important; }

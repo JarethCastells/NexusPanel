@@ -537,6 +537,18 @@ if (!empty($itemsPedido)) {
     }
     /* Override final movil: Mis Pedidos sin layout roto */
     @media (max-width: 768px) {
+        .topbar,
+        .topbar-left,
+        .mobile-menu-btn {
+            position: relative !important;
+            z-index: 5005 !important;
+            pointer-events: auto !important;
+        }
+        .mobile-menu-btn {
+            touch-action: manipulation;
+            min-width: 42px;
+            min-height: 42px;
+        }
         .content-area {
             padding: 0 0 14px !important;
         }
@@ -875,7 +887,7 @@ if (!empty($itemsPedido)) {
                 <div class="rating-hero">
                     <div class="rating-label">Experiencia de entrega</div>
                     <h3><i class="fa-solid fa-star"></i> Califica tu entrega</h3>
-                    <p>Tu pedido ya fue entregado. Cuéntanos qué tal fue tu experiencia.</p>
+                    <p>Tu pedido ya fue entregado. Cuï¿½ntanos quï¿½ tal fue tu experiencia.</p>
                     <div class="rating-stars-preview" id="ratingStarsPreview" aria-hidden="true">
                         <i class="fa-solid fa-star" data-star="1"></i>
                         <i class="fa-solid fa-star" data-star="2"></i>
@@ -968,7 +980,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initPedidosSearch();
     const mobileMenuBtn = document.getElementById('mobileMenu');
     const side = document.getElementById('sidebar');
-    mobileMenuBtn?.addEventListener('click', () => {
+    mobileMenuBtn?.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+    }, { passive: false });
+    mobileMenuBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         side.classList.toggle('open');
         document.body.classList.toggle('sidebar-open', side.classList.contains('open'));
         scheduleTrackingMapResize(200);
@@ -1361,7 +1378,7 @@ async function revocarLinkViaje(btn, pedidoId) {
 }
 
 async function solicitarCancelacionCliente(pedidoId) {
-    const seguro = window.confirm('¿Seguro que quieres cancelar este pedido?');
+    const seguro = window.confirm('ï¿½Seguro que quieres cancelar este pedido?');
     if (!seguro) return;
     const motivo = window.prompt('Escribe el motivo de cancelacion:');
     if (!motivo || !motivo.trim()) {

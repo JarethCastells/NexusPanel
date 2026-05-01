@@ -334,6 +334,110 @@ input:checked + .toggle-slider::before { transform: translateX(20px); background
     .modal-two-col { grid-template-columns: 1fr; }
 }
 
+@media (max-width: 768px) {
+    .prod-table-wrap {
+        overflow: visible !important;
+        background: transparent;
+        border: 0;
+    }
+    .prod-table {
+        width: 100% !important;
+        min-width: 0 !important;
+        border-collapse: separate !important;
+        border-spacing: 8px 10px !important;
+    }
+    .prod-table thead { display: none !important; }
+    .prod-table tbody {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .prod-table tbody tr {
+        display: flex !important;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(9, 19, 38, 0.98);
+        border: 1px solid rgba(59, 130, 246, 0.26);
+        border-radius: 12px;
+        padding: 8px;
+        min-height: 220px;
+    }
+    .prod-table tbody td {
+        border: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100%;
+        min-width: 0;
+    }
+    .prod-table tbody td::before { content: none !important; }
+
+    /* Orden visual de tarjeta */
+    .prod-table tbody td:nth-child(1) { order: 1; }
+    .prod-table tbody td:nth-child(3) { order: 2; }
+    .prod-table tbody td:nth-child(2) { order: 3; }
+    .prod-table tbody td:nth-child(6) { order: 4; }
+    .prod-table tbody td:nth-child(7) { order: 5; }
+    .prod-table tbody td:nth-child(11) { order: 6; margin-top: auto !important; }
+
+    /* Ocultar campos secundarios para hacerlo simple */
+    .prod-table tbody td:nth-child(4),
+    .prod-table tbody td:nth-child(5),
+    .prod-table tbody td:nth-child(8),
+    .prod-table tbody td:nth-child(9),
+    .prod-table tbody td:nth-child(10) {
+        display: none !important;
+    }
+
+    .prod-thumb-wrap,
+    .prod-thumb,
+    .prod-thumb-empty {
+        width: 100% !important;
+        height: 170px !important;
+        border-radius: 10px;
+    }
+    .prod-thumb { object-fit: contain; background: #f8fafc; }
+    .prod-thumb-empty { background: rgba(255,255,255,0.04); }
+
+    .prod-name-cell span {
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .prod-table tbody td:nth-child(2) .prod-code {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+    .prod-table tbody td:nth-child(6) .status-pill,
+    .prod-table tbody td:nth-child(7) .prod-code {
+        font-size: 10px;
+        padding: 3px 7px;
+        border-radius: 999px;
+    }
+    .prod-table tbody td:nth-child(11) .prod-actions {
+        justify-content: flex-start;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .prod-table tbody td:nth-child(11) .btn-edit,
+    .prod-table tbody td:nth-child(11) .btn-delete,
+    .prod-table tbody td:nth-child(11) .btn-restore {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+    }
+    .prod-count { padding: 10px 2px; }
+}
+
+@media (max-width: 420px) {
+    .prod-table tbody {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Filtros categoria/subcategoria en azul moderno */
 .prod-search-form .modal-select {
     appearance: none;

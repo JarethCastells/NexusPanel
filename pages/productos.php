@@ -620,8 +620,29 @@ $totalActivos   = $pdo->query("SELECT COUNT(*) FROM productos WHERE activo=1")->
 $totalInactivos = $pdo->query("SELECT COUNT(*) FROM productos WHERE activo=0")->fetchColumn();
 $totalTodos     = $totalActivos + $totalInactivos;
 
-function imgUrl($imagen) {
-    return $imagen ? "../uploads/productos/$imagen?v=" . time() : null;
+function imgUrl($imagen, $productoId = 0) {
+    $imagen = trim((string)$imagen);
+    $baseDir = __DIR__ . '/../uploads/productos/';
+    if ($imagen !== '') {
+        $path = $baseDir . $imagen;
+        if (is_file($path)) {
+            return "../uploads/productos/$imagen?v=" . filemtime($path);
+        }
+    }
+
+    $id = (int)$productoId;
+    if ($id <= 0 && preg_match('/^prod_(\d+)\.[a-z0-9]+$/i', $imagen, $m)) {
+        $id = (int)$m[1];
+    }
+    if ($id > 0) {
+        $candidatos = glob($baseDir . 'prod_' . $id . '.*') ?: [];
+        foreach ($candidatos as $cand) {
+            if (!is_file($cand)) continue;
+            $name = basename($cand);
+            return "../uploads/productos/$name?v=" . filemtime($cand);
+        }
+    }
+    return null;
 }
 ?>
 <!DOCTYPE html>
@@ -702,8 +723,8 @@ function imgUrl($imagen) {
         .prod-table td:nth-child(4),
         .prod-table th:nth-child(5),
         .prod-table td:nth-child(5) { display: none; }
-        /* Imagen mas pequena */
-        .prod-thumb, .prod-thumb-empty { width: 40px !important; height: 40px !important; }
+        /* Imagen principal mas grande en cards moviles */
+        .prod-thumb, .prod-thumb-empty, .prod-thumb-wrap { width: 100% !important; height: 170px !important; }
         .prod-code { font-size: 10px; }
         .prod-name-cell span { font-size: 12px; }
         .prod-price { font-size: 13px; }
@@ -720,14 +741,25 @@ function imgUrl($imagen) {
     }
     @media (max-width: 768px) {
         .content-area { padding: 12px !important; }
-        .prod-table-wrap { margin: 0 -6px; padding: 0 6px; overflow-x: auto; }
-        .prod-table { min-width: 720px !important; }
-        .prod-search-form { gap: 8px !important; }
+        .prod-table-wrap { margin: 0; padding: 0; overflow-x: visible; }
+        .prod-table { min-width: 0 !important; width: 100% !important; }
+        .prod-toolbar { align-items: stretch; }
+        .prod-search-form {
+            min-width: 0;
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
+        }
         .prod-search-form .modal-input,
         .prod-search-form .modal-select { min-width: 0 !important; width: 100% !important; }
         .prod-table th, .prod-table td { font-size: 12px !important; padding: 11px 8px !important; }
         .status-pill { font-size: 11px !important; padding: 4px 8px !important; }
         .btn-table, .action-btn { min-height: 34px; }
+        #mobileMenu {
+            position: relative;
+            z-index: 9999;
+            pointer-events: auto !important;
+            touch-action: manipulation;
+        }
     }
     </style>
 </head>
@@ -876,7 +908,7 @@ function imgUrl($imagen) {
                 </thead>
                 <tbody>
                 <?php foreach ($productos as $p):
-                    $imgUrl = imgUrl($p['imagen']);
+                    $imgUrl = imgUrl($p['imagen'], (int)$p['id']);
                     $payloadEditar = $p;
                     $payloadEditar['lotes'] = $lotesPorProducto[(int)$p['id']] ?? [];
                 ?>
@@ -1564,7 +1596,20 @@ function updateClock() {
         + ' - ' + now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
 }
 updateClock(); setInterval(updateClock, 1000);
-document.getElementById('mobileMenu')?.addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+(() => {
+    const btn = document.getElementById('mobileMenu');
+    const sidebar = document.getElementById('sidebar') || document.querySelector('.sidebar');
+    if (!btn || !sidebar) return;
+    const toggle = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const open = !sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', open);
+        document.body.classList.toggle('sidebar-open', open);
+    };
+    btn.addEventListener('touchstart', (e) => { e.preventDefault(); }, { passive: false });
+    btn.addEventListener('click', toggle);
+})();
 
 initPanelNotis();
 </script>

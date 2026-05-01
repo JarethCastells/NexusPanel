@@ -231,6 +231,29 @@ body {
     font-size: 18px;
 }
 
+.nexus-sidebar-hotspot {
+    display: none;
+    position: fixed;
+    top: 10px;
+    left: 42px;
+    z-index: 2200;
+    border: 0;
+    background: transparent;
+    color: rgba(203, 213, 225, 0.32);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 4px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    user-select: none;
+}
+.nexus-sidebar-hotspot:hover,
+.nexus-sidebar-hotspot:focus {
+    color: rgba(125, 211, 252, 0.75);
+    outline: none;
+}
+
 .topbar-right { display: flex; align-items: center; gap: 16px; }
 .topbar-date {
     font-family: var(--font-mono);
@@ -336,7 +359,7 @@ svg {
 }
 
 .data-table {
-    min-width: 860px;
+    min-width: 760px;
 }
 
 /* Tablets and down */
@@ -747,11 +770,25 @@ svg {
     }
     .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
     .main-content { margin-left: 0; }
-    .mobile-menu-btn { display: block; }
+    .mobile-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 130;
+        pointer-events: auto !important;
+    }
+    .nexus-sidebar-hotspot {
+        display: inline-block;
+    }
     .content-area { padding: 16px; }
     .stats-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
     .topbar-date { display: none; }
-    .topbar { padding: 0 16px; }
+    .topbar {
+        padding: 0 16px;
+        position: sticky;
+        z-index: 120;
+    }
     .breadcrumb-custom { font-size: 12px; }
     body.sidebar-open { overflow: hidden; }
     body.sidebar-open::before {
@@ -763,10 +800,6 @@ svg {
     }
     .sidebar { z-index: 110; }
     .main-content { position: relative; margin-left: 0; z-index: 1; }
-    body.sidebar-open .main-content {
-        pointer-events: none !important;
-        user-select: none !important;
-    }
     body.sidebar-open .sidebar,
     body.sidebar-open .sidebar * {
         pointer-events: auto !important;
@@ -1654,4 +1687,22 @@ body[data-theme="palette"] #pedidoFilterEstado,
 body[data-theme="palette"] #pedidoFilterCliente,
 body[data-theme="palette"] #pedidoFilterFecha {
     color: #000000 !important;
+}
+
+@media (max-width: 768px) {
+    .content-area { padding: 12px !important; }
+    .card-panel { border-radius: 12px; }
+    .panel-header { gap: 10px; flex-wrap: wrap; }
+    .table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -4px;
+        padding: 0 4px 6px;
+    }
+    .data-table { min-width: 680px !important; }
+    .data-table th,
+    .data-table td {
+        font-size: 12px !important;
+        padding: 10px 8px !important;
+    }
 }
