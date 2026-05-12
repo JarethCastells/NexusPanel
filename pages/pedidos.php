@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireGestion();
@@ -739,6 +739,7 @@ foreach ($pedidos as $pp) {
         <?php endif; ?>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item active"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span><div class="nav-indicator"></div></a>
+        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
         <?php if ($esAdmin): ?><?php endif; ?>
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
         <?php if ($esAdmin): ?>
@@ -815,7 +816,7 @@ foreach ($pedidos as $pp) {
                     <input type="hidden" name="action" value="resolver_cancelacion_solicitada">
                     <input type="hidden" name="solicitud_id" value="<?= (int)$sc['id'] ?>">
                     <div style="font-size:12px;color:#fecaca;min-width:320px;">
-                        <strong>#<?= (int)$sc['pedido_id'] ?></strong> �
+                        <strong>#<?= (int)$sc['pedido_id'] ?></strong> ï¿½
                         <?= $sc['solicitado_por'] === 'cliente' ? 'Cliente' : 'Operador' ?>:
                         <?= htmlspecialchars((string)($sc['solicitado_por'] === 'cliente' ? $sc['cliente_nombre'] : $sc['operador_nombre'])) ?><br>
                         Motivo: <?= htmlspecialchars((string)$sc['motivo']) ?>
@@ -945,7 +946,7 @@ foreach ($pedidos as $pp) {
                                     <div class="pedido-detalle-nombre"><?= htmlspecialchars($item['nombre']) ?></div>
                                     <div class="pedido-detalle-sub">
                                         <?= (int)$item['cantidad'] ?> unidades
-                                        · <?= htmlspecialchars($item['unidad_medida']) ?>
+                                        Â· <?= htmlspecialchars($item['unidad_medida']) ?>
                                     </div>
                                 </div>
                                 
@@ -1044,7 +1045,7 @@ foreach ($pedidos as $pp) {
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <p id="confirmarAsignacionText" style="margin:0;">¿Estas seguro de que deseas asignar este pedido?</p>
+                <p id="confirmarAsignacionText" style="margin:0;">Â¿Estas seguro de que deseas asignar este pedido?</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn-secondary-custom" data-bs-dismiss="modal">No</button>
@@ -1232,8 +1233,8 @@ function abrirResumenPedido(pedidoId) {
             <div class="pedido-detalle-item">
                 <div class="pedido-detalle-meta">
                     <div class="pedido-detalle-nombre">Pedido #${pedido.folio_hex || Number(pedido.id).toString(16).toUpperCase()}</div>
-                    <div class="pedido-detalle-sub">Cliente: ${pedido.cliente_nombre || '-'} · ${pedido.cliente_email || '-'}</div>
-                    <div class="pedido-detalle-sub">Estado: ${pedido.estado || '-'} · Items: ${pedido.total_items || 0}</div>
+                    <div class="pedido-detalle-sub">Cliente: ${pedido.cliente_nombre || '-'} Â· ${pedido.cliente_email || '-'}</div>
+                    <div class="pedido-detalle-sub">Estado: ${pedido.estado || '-'} Â· Items: ${pedido.total_items || 0}</div>
                     <div class="pedido-detalle-sub">Productos: ${pedido.resumen_productos || 'Sin productos'}</div>
                 </div>
                 
@@ -1245,7 +1246,7 @@ function abrirResumenPedido(pedidoId) {
 }
 
 document.getElementById('btnCancelarPedidoAccion')?.addEventListener('click', () => {
-    const ok = window.confirm('¿Estas seguro de que deseas cancelar este pedido?');
+    const ok = window.confirm('Â¿Estas seguro de que deseas cancelar este pedido?');
     if (ok) {
         document.getElementById('formCancelarPedido').submit();
     }
@@ -1335,6 +1336,7 @@ if (PEDIDO_ABRIR_ASIGNACION > 0) {
 </script>
 </body>
 </html>
+
 
 
 

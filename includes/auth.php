@@ -1,5 +1,14 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    $fallbackSessionDir = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'sessions';
+    if (!is_dir($fallbackSessionDir)) {
+        @mkdir($fallbackSessionDir, 0777, true);
+    }
+    if (is_dir($fallbackSessionDir) && is_writable($fallbackSessionDir)) {
+        @session_save_path($fallbackSessionDir);
+    }
+    @session_start();
+}
 
 function estaLogueado()  { return isset($_SESSION['usuario_id']); }
 function usuarioActual() { return $_SESSION ?? []; }

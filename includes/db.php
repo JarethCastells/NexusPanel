@@ -28,6 +28,7 @@ try {
 
     // Migraciones idempotentes para nuevas funciones del demo.
     ensureNexusSchemaV2($pdo);
+    ensureLogisticaMasivaSchema($pdo);
     ensureCatalogoClienteSeed($pdo);
 } catch (PDOException $e) {
     // Mensaje amigable si no puede conectar
@@ -798,6 +799,111 @@ function ensureNexusSchemaV2(PDO $pdo): void {
         ");
     } catch (Throwable $e) {
         // No bloqueamos la app por una migracion parcial en demo.
+    }
+}
+
+function ensureLogisticaMasivaSchema(PDO $pdo): void {
+    static $ran = false;
+    if ($ran) return;
+    $ran = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS logistica_lotes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                folio VARCHAR(40) NOT NULL UNIQUE,
+                manager_id INT NOT NULL,
+                modo_envio ENUM('flotilla','paqueteria') NOT NULL DEFAULT 'flotilla',
+                paqueteria VARCHAR(80) NULL,
+                costo_pct DECIMAL(8,2) NOT NULL DEFAULT 0,
+                costo_por_caja DECIMAL(12,2) NOT NULL DEFAULT 0,
+                costo_estimado_total DECIMAL(14,2) NOT NULL DEFAULT 0,
+                estado ENUM('borrador','pendiente_aceptacion','aceptado','en_embarque','cerrado','cancelado') NOT NULL DEFAULT 'borrador',
+                fecha_salida_programada DATE NULL,
+                fecha_entrega_estimada DATE NULL,
+                hora_salida DATETIME NULL,
+                hora_cierre DATETIME NULL,
+                observaciones VARCHAR(500) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                KEY idx_ll_estado (estado),
+                KEY idx_ll_manager (manager_id),
+                CONSTRAINT fk_ll_manager FOREIGN KEY (manager_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS logistica_lote_pedidos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                lote_id INT NOT NULL,
+                pedido_id INT NOT NULL,
+                ruta_grupo VARCHAR(80) NULL,
+                cajas_sugeridas INT NOT NULL DEFAULT 1,
+                cajas_asignadas INT NOT NULL DEFAULT 1,
+                operador_id INT NULL,
+                estado ENUM('sugerido','asignado','en_ruta','entregado_parcial','entregado','cancelado') NOT NULL DEFAULT 'sugerido',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY ux_llp_lote_pedido (lote_id, pedido_id),
+                KEY idx_llp_operador (operador_id),
+                KEY idx_llp_estado (estado),
+                CONSTRAINT fk_llp_lote FOREIGN KEY (lote_id) REFERENCES logistica_lotes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_llp_pedido FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE,
+                CONSTRAINT fk_llp_operador FOREIGN KEY (operador_id) REFERENCES usuarios(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS logistica_lote_operadores (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                lote_id INT NOT NULL,
+                operador_id INT NOT NULL,
+                camion_alias VARCHAR(80) NULL,
+                capacidad_cajas INT NOT NULL DEFAULT 25,
+                cajas_asignadas INT NOT NULL DEFAULT 0,
+                hora_salida DATETIME NULL,
+                hora_entrega DATETIME NULL,
+                estado ENUM('pendiente','cargando','en_ruta','cerrado') NOT NULL DEFAULT 'pendiente',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY ux_llo_lote_operador (lote_id, operador_id),
+                KEY idx_llo_estado (estado),
+                CONSTRAINT fk_llo_lote FOREIGN KEY (lote_id) REFERENCES logistica_lotes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_llo_operador FOREIGN KEY (operador_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS logistica_eventos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                lote_id INT NOT NULL,
+                usuario_id INT NULL,
+                tipo_evento VARCHAR(60) NOT NULL,
+                detalle VARCHAR(500) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_le_lote (lote_id),
+                CONSTRAINT fk_le_lote FOREIGN KEY (lote_id) REFERENCES logistica_lotes(id) ON DELETE CASCADE,
+                CONSTRAINT fk_le_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+
+        if (tableExists($pdo, 'logistica_lote_operadores')) {
+            if (!columnExists($pdo, 'logistica_lote_operadores', 'checklist_salida_json')) {
+                $pdo->exec("ALTER TABLE logistica_lote_operadores ADD COLUMN checklist_salida_json TEXT NULL AFTER estado");
+            }
+            if (!columnExists($pdo, 'logistica_lote_operadores', 'checklist_cierre_json')) {
+                $pdo->exec("ALTER TABLE logistica_lote_operadores ADD COLUMN checklist_cierre_json TEXT NULL AFTER checklist_salida_json");
+            }
+            if (!columnExists($pdo, 'logistica_lote_operadores', 'fecha_operacion')) {
+                $pdo->exec("ALTER TABLE logistica_lote_operadores ADD COLUMN fecha_operacion DATE NULL AFTER checklist_cierre_json");
+            }
+        }
+
+        if (tableExists($pdo, 'logistica_lote_pedidos') && !columnExists($pdo, 'logistica_lote_pedidos', 'prioridad_ruta')) {
+            $pdo->exec("ALTER TABLE logistica_lote_pedidos ADD COLUMN prioridad_ruta INT NOT NULL DEFAULT 100 AFTER ruta_grupo");
+        }
+    } catch (Throwable $e) {
+        // Evitar bloquear app por migracion parcial.
     }
 }
 

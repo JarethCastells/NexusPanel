@@ -353,6 +353,7 @@ $usuariosJson = json_encode(array_map(fn($u) => [
         <a href="clientes.php" class="nav-item"><i class="fa-solid fa-user-group"></i><span>Clientes</span></a>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
+        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a><?php endif; ?>
         <div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item active">
@@ -691,6 +692,7 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
 
 
 

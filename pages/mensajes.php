@@ -79,7 +79,8 @@ $operadorId = (int)($_GET['operador_id'] ?? ($operadores[0]['id'] ?? 0));
         <a href="<?= htmlspecialchars($inicioHref) ?>" class="nav-item"><i class="fa-solid fa-gauge-high"></i><span>Inicio</span></a>
         <?php if ($esAdmin): ?><a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos e inventario</span></a>
-        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a><a href="mensajes.php" class="nav-item active"><i class="fa-solid fa-comments"></i><span>Mensajes</span><div class="nav-indicator"></div></a>
+        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a>
+        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a><a href="mensajes.php" class="nav-item active"><i class="fa-solid fa-comments"></i><span>Mensajes</span><div class="nav-indicator"></div></a>
         <?php if ($esAdmin): ?><div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a><?php endif; ?>
         <div class="nav-section-label">Cuenta</div>
@@ -293,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 

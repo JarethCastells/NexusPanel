@@ -154,6 +154,63 @@ if (!empty($itemsPedido)) {
     .live-badge { display: inline-flex; align-items: center; gap: 6px; color: #ef4444; font-weight: 700; font-family: var(--font-mono); }
     .blink-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; animation: blink 1s infinite; }
 
+    /* Tarjeta de seguimiento simplificada para cliente */
+    .tracking-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        background: linear-gradient(165deg, rgba(8,17,34,.96), rgba(9,24,45,.94));
+        border: 1px solid rgba(59,130,246,.28);
+        border-radius: 16px;
+        padding: 12px;
+        box-shadow: 0 10px 30px rgba(2,8,23,.35);
+    }
+    .tracking-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .tracking-title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .tracking-title strong {
+        color: #e2e8f0;
+        font-size: 15px;
+    }
+    .tracking-title span {
+        color: #93c5fd;
+        font-size: 12px;
+    }
+    .tracking-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(14,165,233,.35);
+        background: rgba(14,165,233,.14);
+        color: #7dd3fc;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+    }
+    .tracking-shell .mapa-wrap {
+        flex: 1;
+        min-height: 520px;
+    }
+    @media (max-width: 900px) {
+        .tracking-shell .mapa-wrap {
+            min-height: 340px;
+        }
+    }
+
     /* ── FAB Chat flotante (Cliente) ── */
     .chat-fab {
         position: absolute; bottom: 20px; right: 20px; z-index: 1000;
@@ -623,6 +680,170 @@ if (!empty($itemsPedido)) {
             max-height: 340px !important;
         }
     }
+    /* ==============================================================================
+       REDISEÑO SIMPLE CLIENTE (final override)
+       ============================================================================== */
+    .pedidos-layout {
+        display: grid !important;
+        grid-template-columns: 320px 1fr;
+        min-height: calc(100vh - 64px);
+        height: auto !important;
+        gap: 0;
+    }
+    .pedidos-lista {
+        border-right: 1px solid var(--border);
+        background: rgba(6, 12, 24, 0.9);
+        overflow-y: auto;
+        max-height: calc(100vh - 64px);
+    }
+    .pedidos-lista-header {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: rgba(7, 14, 28, 0.96);
+        backdrop-filter: blur(8px);
+    }
+    .pedido-item {
+        display: block;
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        text-decoration: none;
+    }
+    .pedido-item.active {
+        background: rgba(14, 165, 233, 0.12);
+        border-left: 3px solid #22d3ee;
+        padding-left: 13px;
+    }
+    .pedido-item-total {
+        color: #93c5fd !important;
+        font-weight: 700;
+        font-size: 12px;
+    }
+    .pedido-item-fecha {
+        color: var(--text-muted);
+        font-size: 12px;
+        margin-top: 4px;
+    }
+    .pedido-detalle {
+        overflow-y: auto;
+        padding: 14px;
+    }
+    .estado-stepper {
+        padding: 14px !important;
+        border-radius: 14px;
+    }
+    .stepper-wrap {
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+    }
+    .stepper-line { display: none !important; }
+    .stepper-step {
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 12px;
+        padding: 10px 8px;
+        min-height: 86px;
+        background: rgba(10, 20, 38, 0.75);
+    }
+    .stepper-step small {
+        display: block !important;
+        max-width: 100% !important;
+        font-size: 10px !important;
+        line-height: 1.25 !important;
+        color: #7f94b4 !important;
+        text-align: center !important;
+        margin-top: 6px !important;
+    }
+    .stepper-step.current {
+        border-color: rgba(34, 211, 238, 0.55);
+        box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2) inset;
+    }
+    .stepper-step.done {
+        border-color: rgba(16, 185, 129, 0.45);
+    }
+    .detalle-grid {
+        display: grid !important;
+        grid-template-columns: 360px 1fr;
+        gap: 14px !important;
+        margin-top: 14px !important;
+        height: auto !important;
+        min-height: 520px;
+    }
+    .detalle-info {
+        width: auto !important;
+        border-radius: 14px;
+    }
+    .tracking-shell {
+        border-radius: 14px;
+    }
+    .tracking-tools {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+    }
+    .tracking-tool-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        border: 1px solid rgba(148,163,184,.28);
+        background: rgba(15,23,42,.75);
+        color: #cbd5e1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all .2s ease;
+    }
+    .tracking-tool-btn:hover {
+        border-color: rgba(56,189,248,.55);
+        color: #7dd3fc;
+        background: rgba(2, 132, 199, .2);
+    }
+    .tracking-shell .mapa-wrap {
+        min-height: 560px;
+        border-radius: 12px;
+    }
+    .tracking-shell.map-size-small .mapa-wrap { min-height: 380px; }
+    .tracking-shell.map-size-large .mapa-wrap { min-height: 680px; }
+    .chat-fab {
+        right: 14px !important;
+        bottom: 14px !important;
+    }
+    @media (max-width: 1100px) {
+        .detalle-grid {
+            grid-template-columns: 320px 1fr;
+        }
+        .tracking-shell .mapa-wrap {
+            min-height: 500px;
+        }
+    }
+    @media (max-width: 900px) {
+        .pedidos-layout {
+            grid-template-columns: 1fr !important;
+            min-height: auto;
+        }
+        .pedidos-lista {
+            max-height: none !important;
+            overflow-y: visible !important;
+            border-right: 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .pedido-detalle {
+            padding: 10px;
+        }
+        .stepper-wrap {
+            grid-template-columns: 1fr 1fr !important;
+        }
+        .detalle-grid {
+            grid-template-columns: 1fr !important;
+            min-height: auto;
+        }
+        .tracking-shell .mapa-wrap {
+            min-height: 340px !important;
+            height: 340px !important;
+        }
+    }
     </style>
 </head>
 <body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
@@ -704,7 +925,7 @@ if (!empty($itemsPedido)) {
                         <?= $estadoLabels[$p['estado']] ?? $p['estado'] ?>
                     </span>
                 </div>
-                <div class="pedido-item-total">Estado: <?= $estadoLabels[$p['estado']] ?? $p['estado'] ?></div>
+                <div class="pedido-item-total"><?= $estadoLabels[$p['estado']] ?? $p['estado'] ?></div>
                 <div class="pedido-item-fecha">
                     <?= date('d/m/Y H:i', strtotime($p['created_at'])) ?>
                 </div>
@@ -869,11 +1090,29 @@ if (!empty($itemsPedido)) {
 
                 <!-- Mapa tracking -->
                 <?php if (($pedido['estado'] ?? '') === 'en_camino'): ?>
-                <div class="mapa-wrap">
-                    <div id="trackingMapa"></div>
-                    <div class="mapa-legend">
-                        <span id="trackingStatus">Actualizando ubicacion...</span>
-                        <div class="live-badge"><span class="blink-dot"></span> EN VIVO</div>
+                <div class="tracking-shell">
+                    <div class="tracking-header">
+                        <div class="tracking-title">
+                            <strong>Tu paquete va en camino</strong>
+                            <span>Seguimiento en tiempo real del operador</span>
+                        </div>
+                        <div class="tracking-tools" aria-label="Controles de mapa">
+                            <button type="button" class="tracking-tool-btn" title="Mapa más pequeño" onclick="setMapSize('small')"><i class="fa-solid fa-minus"></i></button>
+                            <button type="button" class="tracking-tool-btn" title="Mapa normal" onclick="setMapSize('normal')"><i class="fa-solid fa-equals"></i></button>
+                            <button type="button" class="tracking-tool-btn" title="Mapa más grande" onclick="setMapSize('large')"><i class="fa-solid fa-plus"></i></button>
+                            <button type="button" class="tracking-tool-btn" title="Pantalla completa" onclick="toggleMapFullscreen()"><i class="fa-solid fa-expand"></i></button>
+                        </div>
+                        <div class="tracking-chip"><span class="blink-dot"></span> En vivo</div>
+                    </div>
+                    <div class="mapa-wrap">
+                        <div id="trackingMapa"></div>
+                        <div class="mapa-legend">
+                            <span id="trackingStatus">Actualizando ubicacion...</span>
+                            <div class="live-badge"><span class="blink-dot"></span> EN VIVO</div>
+                        </div>
+                    </div>
+                    <div style="font-size:12px;color:#94a3b8;padding:2px 2px 0;">
+                        Te avisaremos si hay cambios en ruta o estado de entrega.
                     </div>
                     <?php if (($pedido['operador_id'] ?? 0) && (($pedido['estado'] ?? '') === 'en_camino')): ?>
                     <button class="chat-fab" onclick="toggleChatModal()" id="chatFab">
@@ -1099,6 +1338,29 @@ function initTrackingMap() {
         map.setView([19.4326,-99.1332],12);
     }
     scheduleTrackingMapResize(220);
+}
+
+function setMapSize(size = 'normal') {
+    const shell = document.querySelector('.tracking-shell');
+    if (!shell) return;
+    shell.classList.remove('map-size-small', 'map-size-large');
+    if (size === 'small') shell.classList.add('map-size-small');
+    if (size === 'large') shell.classList.add('map-size-large');
+    scheduleTrackingMapResize(120);
+}
+
+function toggleMapFullscreen() {
+    const wrap = document.querySelector('.tracking-shell .mapa-wrap');
+    if (!wrap) return;
+    if (!document.fullscreenElement) {
+        wrap.requestFullscreen?.().then(() => {
+            scheduleTrackingMapResize(180);
+        }).catch(() => {});
+        return;
+    }
+    document.exitFullscreen?.().then(() => {
+        scheduleTrackingMapResize(180);
+    }).catch(() => {});
 }
 
 async function pollTracking() {

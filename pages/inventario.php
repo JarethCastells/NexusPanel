@@ -312,6 +312,7 @@ $movs = $pdo->query("
         <?php if ($esAdmin): ?><a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a>
+        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
         <?php if ($esAdmin): ?><a href="inventario.php" class="nav-item <?= $vista !== 'inicio' ? 'active' : '' ?>"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span><?= $vista !== 'inicio' ? '<div class="nav-indicator"></div>' : '' ?></a><?php endif; ?>
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
         <?php if ($esAdmin): ?><div class="nav-section-label">Operaciones</div>
@@ -577,6 +578,7 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
 
 
 

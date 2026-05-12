@@ -787,6 +787,7 @@ function imgUrl($imagen, $productoId = 0) {
             <i class="fa-solid fa-pills"></i><span>Productos e inventario</span><div class="nav-indicator"></div>
         </a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a>
+        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
         <?php if ($esAdmin): ?><?php endif; ?>
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
         <?php if ($esAdmin): ?><div class="nav-section-label">Operaciones</div>
@@ -1613,6 +1614,7 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
 
 
 
