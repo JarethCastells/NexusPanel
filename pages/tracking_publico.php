@@ -8,6 +8,8 @@ $token = htmlspecialchars($_GET['t'] ?? '', ENT_QUOTES, 'UTF-8');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NexusPanel | Seguimiento en tiempo real</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         :root {
             color-scheme: dark;
@@ -55,6 +57,9 @@ $token = htmlspecialchars($_GET['t'] ?? '', ENT_QUOTES, 'UTF-8');
     <div class="topbar">
         <div class="title">NexusPanel | Viaje compartido</div>
         <div class="status" id="status">Cargando ubicacion...</div>
+        <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema" style="background:transparent;border:none;color:#fff;cursor:pointer;padding:8px;">
+            <i class="fa-solid fa-moon theme-toggle-icon"></i>
+        </button>
     </div>
     <div id="map"></div>
 

@@ -112,13 +112,14 @@ try {
         throw new RuntimeException('Inventario insuficiente: ' . implode(' | ', $erroresStock));
     }
 
-    $operadorAsignado = buscarOperadorCercano(
-        $pdo,
-        $lat !== null ? (float)$lat : null,
-        $lng !== null ? (float)$lng : null
-    );
-    $estadoInicial = $operadorAsignado ? 'aceptado' : 'pendiente';
-    $operadorId = $operadorAsignado ? (int)$operadorAsignado['id'] : null;
+    // Desactivado: El manager debe asignar manualmente.
+    // $operadorAsignado = buscarOperadorCercano(
+    //     $pdo,
+    //     $lat !== null ? (float)$lat : null,
+    //     $lng !== null ? (float)$lng : null
+    // );
+    $estadoInicial = 'pendiente';
+    $operadorId = null;
     $hasFolioHex = columnExists($pdo, 'pedidos', 'folio_hex');
     $folioHex = generarFolioHex($pdo);
     $fechaPedido = fechaMysqlAhora();
@@ -197,17 +198,18 @@ try {
 
     recalcularHistorialCliente($pdo, (int)$u['usuario_id']);
     registrarHistorialPedido($pdo, $pedidoId, 'pendiente', (int)$u['usuario_id'], 'Pedido creado por cliente');
-    if ($estadoInicial === 'aceptado' && $operadorId !== null) {
-        registrarHistorialPedido(
-            $pdo,
-            $pedidoId,
-            'aceptado',
-            $operadorId,
-            'Asignacion automatica por cercania en km'
-        );
-        $pdo->prepare("INSERT INTO chat (pedido_id,usuario_id,mensaje) VALUES (?,?,?)")
-            ->execute([$pedidoId, $operadorId, 'He aceptado tu pedido. En breve estare en camino.']);
-    }
+    // Auto-asignación deshabilitada, este bloque ya no se ejecutará por defecto
+    // if ($estadoInicial === 'aceptado' && $operadorId !== null) {
+    //     registrarHistorialPedido(
+    //         $pdo,
+    //         $pedidoId,
+    //         'aceptado',
+    //         $operadorId,
+    //         'Asignacion automatica por cercania en km'
+    //     );
+    //     $pdo->prepare("INSERT INTO chat (pedido_id,usuario_id,mensaje) VALUES (?,?,?)")
+    //         ->execute([$pedidoId, $operadorId, 'He aceptado tu pedido. En breve estare en camino.']);
+    // }
     registrarNotificacionesEstandarPedido(
         $pdo,
         $pedidoId,

@@ -145,6 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="assets/css/login.css">
+    <link rel="stylesheet" href="assets/css/theme.css">
+    <script src="assets/js/theme.js"></script>
     <?php if ($turnstileEnabled): ?>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <?php endif; ?>
@@ -314,6 +316,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <span>Plataforma de gestion</span>
             </div>
         </div>
+
+<button class="theme-toggle-floating" onclick="toggleTheme()" title="Cambiar tema">
+    <i class="fa-solid fa-moon theme-toggle-icon"></i>
+</button>
+
+<style>
+.theme-toggle-floating {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: var(--card-shadow);
+    transition: all 0.3s ease;
+}
+.theme-toggle-floating:hover {
+    transform: scale(1.1);
+    border-color: var(--accent);
+}
+</style>
     </div>
 </div>
 

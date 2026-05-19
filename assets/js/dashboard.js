@@ -148,33 +148,6 @@ function initSidebarHotspot() {
     hotspot.addEventListener('touchend', toggleSidebar, { passive: false });
 }
 
-function toggleTheme() {
-    const currentTheme = document.body.getAttribute('data-theme') || 'dark';
-    const newTheme = currentTheme === 'dark' ? 'palette' : 'dark';
-    
-    // Optimistic UI update
-    document.body.setAttribute('data-theme', newTheme);
-    
-    // Detect correct path to API
-    const isSubdir = window.location.pathname.includes('/pages/');
-    const apiPath = isSubdir ? '../api/tema.php' : 'api/tema.php';
-    
-    // Save to DB
-    fetch(apiPath, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tema: newTheme })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (!data.success) {
-            console.error('Error al guardar el tema:', data.error);
-        }
-    })
-    .catch(err => {
-        console.error('Network error:', err);
-    });
-}
 
 function annotateResponsiveTables() {
     document.querySelectorAll('table.data-table, table.prod-table').forEach((table) => {

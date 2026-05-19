@@ -29,6 +29,7 @@ try {
     // Migraciones idempotentes para nuevas funciones del demo.
     ensureNexusSchemaV2($pdo);
     ensureLogisticaMasivaSchema($pdo);
+    ensureLogisticaInteligenteSchema($pdo);
     ensureCatalogoClienteSeed($pdo);
 } catch (PDOException $e) {
     // Mensaje amigable si no puede conectar
@@ -1285,4 +1286,89 @@ function buscarOperadorCercano(PDO $pdo, ?float $lat, ?float $lng): ?array {
         }
     }
     return $best;
+}
+
+function ensureLogisticaInteligenteSchema(PDO $pdo): void {
+    static $ran = false;
+    if ($ran) return;
+    $ran = true;
+
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `logistica_lineas` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `nombre` VARCHAR(100) NOT NULL UNIQUE,
+                `prioridad` INT DEFAULT 1,
+                `rastreo_tiempo_real` TINYINT(1) DEFAULT 0,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `logistica_unidades` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `linea_id` INT NOT NULL,
+                `tipo` VARCHAR(50) NOT NULL,
+                `tipo_caja` VARCHAR(50) NOT NULL,
+                `capacidad_kg` INT NOT NULL,
+                `peso_minimo` INT DEFAULT 0,
+                `mercancia_permitida` VARCHAR(255) DEFAULT 'general',
+                CONSTRAINT fk_unidad_linea FOREIGN KEY (linea_id) REFERENCES logistica_lineas(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `logistica_rutas` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `linea_id` INT NOT NULL,
+                `origen` VARCHAR(100) NOT NULL,
+                `destino` VARCHAR(100) NOT NULL,
+                `frecuencia` VARCHAR(50) DEFAULT 'diaria',
+                `tarifa_fija` DECIMAL(10,2) DEFAULT 0.00,
+                `tiempo_estimado_hrs` INT DEFAULT 24,
+                `cumplimiento_pct` INT DEFAULT 100,
+                CONSTRAINT fk_ruta_linea FOREIGN KEY (linea_id) REFERENCES logistica_lineas(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `logistica_citas` (
+                `id` INT AUTO_INCREMENT PRIMARY KEY,
+                `pedido_id` INT NOT NULL,
+                `linea_id` INT NOT NULL,
+                `fecha_cita` DATETIME NOT NULL,
+                `estado` ENUM('programada','completada','cancelada') DEFAULT 'programada',
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT fk_cita_linea FOREIGN KEY (linea_id) REFERENCES logistica_lineas(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+
+        // Seed if empty
+        $count = $pdo->query("SELECT COUNT(*) FROM logistica_lineas")->fetchColumn();
+        if ($count == 0) {
+            $pdo->exec("
+                INSERT INTO `logistica_lineas` (`nombre`, `prioridad`, `rastreo_tiempo_real`) VALUES 
+                ('Loxagon', 1, 1),
+                ('Bisonte', 2, 0),
+                ('Tres Guerras', 3, 1),
+                ('Austral', 4, 0);
+
+                INSERT INTO `logistica_unidades` (`linea_id`, `tipo`, `tipo_caja`, `capacidad_kg`, `peso_minimo`, `mercancia_permitida`) VALUES 
+                (1, 'TORTON', 'Seca', 15000, 5000, 'General, Alimentos'),
+                (1, '3.5 TON', 'Seca', 3500, 500, 'General'),
+                (1, '1 TON', 'Seca', 1000, 0, 'General'),
+                (2, 'TORTON', 'Seca', 15000, 2000, 'General'),
+                (2, '1 TON', 'Refrigerada', 1000, 0, 'Perecederos'),
+                (3, 'TORTON', 'Seca', 15000, 2000, 'General'),
+                (4, '3.5 TON', 'Plataforma', 3500, 500, 'Construcción');
+
+                INSERT INTO `logistica_rutas` (`linea_id`, `origen`, `destino`, `frecuencia`, `tarifa_fija`, `tiempo_estimado_hrs`, `cumplimiento_pct`) VALUES 
+                (1, 'CDMX', 'Guadalajara', 'diaria', 15000.00, 12, 98),
+                (1, 'Monterrey', 'CDMX', 'diaria', 18000.00, 14, 95),
+                (2, 'Querétaro', 'Puebla', 'semanal', 8000.00, 6, 92),
+                (3, 'Veracruz', 'CDMX', 'bajo demanda', 12000.00, 8, 90),
+                (4, 'Mérida', 'Cancún', 'diaria', 5000.00, 4, 99);
+            ");
+        }
+    } catch (Throwable $e) {}
 }

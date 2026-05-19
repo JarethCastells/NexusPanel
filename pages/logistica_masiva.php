@@ -1,7 +1,7 @@
 <?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
-requireGestion();
+requireAdmin();
 
 $usuario = usuarioActual();
 $esInventario = esInventario();
@@ -9,8 +9,9 @@ $esAdmin = esAdmin();
 $nombreRol = nombreRolActual();
 $msg = '';
 $err = '';
+$hasFolio = columnExists($pdo, 'pedidos', 'folio');
 $hasFolioHexPedidos = columnExists($pdo, 'pedidos', 'folio_hex');
-$folioExprPedidos = $hasFolioHexPedidos ? 'p.folio_hex' : 'UPPER(HEX(p.id))';
+$folioExprPedidos = $hasFolio ? 'p.folio' : ($hasFolioHexPedidos ? 'p.folio_hex' : 'UPPER(HEX(p.id))');
 $hasCapacidadPedidos = columnExists($pdo, 'usuarios', 'capacidad_pedidos');
 $exprCapacidadPedidos = $hasCapacidadPedidos ? 'COALESCE(capacidad_pedidos,5)' : '5';
 
@@ -545,20 +546,22 @@ if ($loteActivoId > 0) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .lm-grid{display:grid;grid-template-columns:350px 1fr;gap:14px}
         .lm-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:14px}
         .lm-title{font-weight:700;font-size:16px;margin:0 0 8px}
         .lm-muted{color:var(--text-muted);font-size:12px}
         .lm-list{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:10px;padding:8px}
-        .lm-row{display:flex;justify-content:space-between;gap:8px;padding:9px 8px;border-bottom:1px solid rgba(255,255,255,.06);align-items:center}
+        .lm-row{display:flex;justify-content:space-between;gap:8px;padding:9px 8px;border-bottom:1px solid var(--border);align-items:center}
         .lm-row:last-child{border-bottom:0}
         .lm-row-main{display:flex;align-items:center;gap:10px;min-width:0}
         .lm-row-main input[type="checkbox"]{margin:0}
         .lm-row-text{display:flex;flex-direction:column;min-width:0}
-        .lm-row-folio{font-weight:700;color:#dff2ff;line-height:1.1}
-        .lm-row-client{font-size:12px;color:#9cc3de;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
-        .lm-badge{font-size:11px;border:1px solid rgba(0,212,255,.3);padding:2px 8px;border-radius:999px;color:#7dd3fc}
+        .lm-row-folio{font-weight:700;color:var(--text-primary);line-height:1.1}
+        .lm-row-client{font-size:12px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px}
+        .lm-badge{font-size:11px;border:1px solid var(--border-focus);padding:2px 8px;border-radius:999px;color:var(--accent)}
         .btn-lm{
             height:40px;
             border-radius:10px;
@@ -589,11 +592,11 @@ if ($loteActivoId > 0) {
             cursor:pointer;
         }
         .lm-table{width:100%;border-collapse:collapse}
-        .lm-table th,.lm-table td{padding:8px;border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;vertical-align:top}
+        .lm-table th,.lm-table td{padding:8px;border-bottom:1px solid var(--border);font-size:12px;vertical-align:top}
         .lm-table th{color:var(--text-dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
         .lm-input{width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text-primary);border-radius:8px;padding:8px;font-size:12px}
         .lm-kpi{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;margin-bottom:10px}
-        .lm-kpi-card{border:1px solid var(--border);border-radius:12px;padding:10px;background:linear-gradient(180deg,rgba(17,26,49,.9),rgba(9,14,30,.95))}
+        .lm-kpi-card{border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--card-bg)}
         .lm-kpi-card b{display:block;font-size:22px}
         .lm-kpi-card span{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
         .lm-progress{height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden}
@@ -614,7 +617,7 @@ if ($loteActivoId > 0) {
         @media (max-width:1100px){.lm-grid{grid-template-columns:1fr}.lm-kpi{grid-template-columns:repeat(2,minmax(140px,1fr))}}
     </style>
 </head>
-<body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
+<body>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header"><div class="sidebar-logo"><div class="logo-icon-sm"><i class="fa-solid fa-hexagon-nodes"></i></div><span class="logo-text-sm">Nexus<strong>Panel</strong></span></div></div>
     <div class="sidebar-user">
@@ -623,12 +626,20 @@ if ($loteActivoId > 0) {
     </div>
     <nav class="sidebar-nav">
         <div class="nav-section-label">Principal</div>
-        <a href="<?= $esInventario ? 'inventario.php?vista=inicio' : 'dashboard.php' ?>" class="nav-item"><i class="fa-solid fa-house"></i><span>Inicio</span></a>
-        <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos e inventario</span></a>
-        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a>
-        <a href="logistica_masiva.php" class="nav-item active"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span><div class="nav-indicator"></div></a>
+        <a href="<?= $esInventario ? 'inventario.php?vista=inicio' : 'dashboard.php' ?>" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>Inicio</span></a>
+        <?php if ($esAdmin): ?><a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
+        <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
+        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
+        <?php if ($esAdmin): ?>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+        <?php endif; ?>
+        
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+
+        <div class="nav-section-label">Operaciones</div>
         <?php if ($esAdmin): ?><a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a><?php endif; ?>
+
+        <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
 </aside>
@@ -639,7 +650,12 @@ if ($loteActivoId > 0) {
             <button class="mobile-menu-btn" id="mobileMenu"><i class="fa-solid fa-bars"></i></button>
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span class="active">Logistica Masiva</span></div>
         </div>
-        <div class="topbar-right"><div class="topbar-date" id="topbarDate"></div></div>
+        <div class="topbar-right">
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
+            <div class="topbar-date" id="topbarDate"></div>
+        </div>
     </header>
 
     <div class="content-area">
@@ -878,3 +894,4 @@ if ($loteActivoId > 0) {
 <script src="../assets/js/dashboard.js"></script>
 </body>
 </html>
+

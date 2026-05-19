@@ -4,20 +4,20 @@
    ============================================= */
 
 :root {
-    --primary:     #00d4ff;
-    --primary-dim: rgba(0, 212, 255, 0.15);
-    --accent:      #7c3aed;
-    --accent-dim:  rgba(124, 58, 237, 0.2);
-    --success:     #10b981;
-    --error:       #ef4444;
-    --bg-dark:     #060a12;
-    --bg-card:     #0d1422;
-    --bg-input:    #0a0f1c;
-    --border:      rgba(255,255,255,0.07);
-    --border-hover:rgba(0, 212, 255, 0.3);
-    --text-primary:#f0f6ff;
-    --text-muted:  #5a7090;
-    --text-dim:    #3a5070;
+    --primary:     var(--accent);
+    --primary-dim: var(--accent-soft);
+    --accent:      var(--accent);
+    --accent-dim:  var(--accent-soft);
+    --success:     var(--success);
+    --error:       var(--danger);
+    --bg-dark:     var(--bg-primary);
+    --bg-card:     var(--card-bg);
+    --bg-input:    var(--input-bg);
+    --border:      var(--border);
+    --border-hover:var(--accent);
+    --text-primary:var(--text-primary);
+    --text-muted:  var(--text-muted);
+    --text-dim:    var(--text-light);
     --font-main:   'Sora', sans-serif;
     --font-mono:   'JetBrains Mono', monospace;
 }
@@ -115,10 +115,14 @@ body {
     display: flex;
     align-items: center;
     padding: 60px;
-    background: linear-gradient(135deg, rgba(0,212,255,0.04) 0%, rgba(124,58,237,0.06) 100%);
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(6, 95, 70, 0.12) 100%);
     border-right: 1px solid var(--border);
     position: relative;
     overflow: hidden;
+}
+
+[data-theme="dark"] .brand-panel {
+    background: linear-gradient(135deg, rgba(0,212,255,0.04) 0%, rgba(124,58,237,0.06) 100%);
 }
 
 .brand-panel::before {
@@ -154,15 +158,20 @@ body {
 
 .logo-icon {
     width: 48px; height: 48px;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
+    background: linear-gradient(135deg, #10b981, #059669);
     border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 22px;
     color: #fff;
-    box-shadow: 0 0 30px rgba(0,212,255,0.3);
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.3);
     animation: iconPulse 3s ease-in-out infinite;
+}
+
+[data-theme="dark"] .logo-icon {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    box-shadow: 0 0 30px rgba(0,212,255,0.3);
 }
 @keyframes iconPulse {
     0%,100% { box-shadow: 0 0 30px rgba(0,212,255,0.3); }
@@ -260,7 +269,7 @@ body {
     align-items: center;
     justify-content: center;
     padding: 40px;
-    background: rgba(6,10,18,0.6);
+    background: var(--bg-card);
 }
 
 .form-container {
@@ -382,8 +391,8 @@ body {
 .form-input::placeholder { color: var(--text-dim); }
 .form-input:focus {
     border-color: var(--primary);
-    background: rgba(0,212,255,0.04);
-    box-shadow: 0 0 0 3px rgba(0,212,255,0.08), 0 0 20px rgba(0,212,255,0.05);
+    background: var(--primary-dim);
+    box-shadow: 0 0 0 3px var(--primary-dim), 0 0 20px var(--primary-dim);
 }
 .form-input:focus ~ .input-icon,
 .input-wrapper:focus-within .input-icon { color: var(--primary); }
@@ -500,7 +509,7 @@ body {
 .demo-credentials {
     margin-top: 32px;
     padding: 20px;
-    background: rgba(255,255,255,0.02);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 14px;
 }
@@ -525,7 +534,7 @@ body {
 }
 .demo-card:hover {
     border-color: var(--border-hover);
-    background: rgba(0,212,255,0.04);
+    background: var(--primary-dim);
     transform: translateY(-2px);
 }
 .demo-role {

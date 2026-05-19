@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireGestion();
@@ -512,10 +512,12 @@ foreach ($pedidos as $pp) {
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .toolbar-grid { display:grid; gap:10px; grid-template-columns: minmax(220px,2fr) repeat(3,minmax(150px,1fr)) auto; align-items:center; }
-        .toolbar-grid .modal-input, .toolbar-grid .modal-select { height:42px; width:100%; background:rgba(8,14,30,.72); border:1px solid rgba(86,113,162,.35); color:#dbeafe; border-radius:10px; padding:0 12px; }
-        .toolbar-grid .modal-input::placeholder { color:#8da7cc; }
+        .toolbar-grid .modal-input, .toolbar-grid .modal-select { height:42px; width:100%; background:var(--input-bg); border:1px solid var(--border); color:var(--text-primary); border-radius:10px; padding:0 12px; }
+        .toolbar-grid .modal-input::placeholder { color:var(--text-muted); }
         .toolbar-grid input[type="date"] { position: relative; z-index: 3; pointer-events: auto; color-scheme: dark; }
         .table-wrapper { overflow-x:auto; }
         .data-table { min-width: 980px; }
@@ -530,9 +532,9 @@ foreach ($pedidos as $pp) {
             height:34px;
             padding:0 10px;
             border-radius:9px;
-            background:rgba(8,14,30,.72);
-            color:#dbeafe;
-            border:1px solid rgba(86,113,162,.35);
+            background:var(--input-bg);
+            color:var(--text-primary);
+            border:1px solid var(--border);
             font-size:12px;
         }
         .btn-table { height:36px; padding:0 12px; border-radius:10px; font-size:12px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; font-weight:600; }
@@ -559,12 +561,12 @@ foreach ($pedidos as $pp) {
         .evidencia-card { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:rgba(255,255,255,0.02); }
         .evidencia-card img { width:100%; height:130px; object-fit:cover; display:block; background:#0a1123; }
         .evidencia-card small { display:block; padding:8px 10px; color:var(--text-muted); font-size:11px; }
-        .operador-asignado { background: rgba(0,212,255,0.14); border: 1px solid rgba(0,212,255,0.35); color: #9cecff; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; display:inline-flex; gap:6px; align-items:center; }
+        .operador-asignado { background: var(--accent-soft); border: 1px solid var(--border-focus); color: var(--accent); padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; display:inline-flex; gap:6px; align-items:center; }
         .pending-card { border:1px solid rgba(245,158,11,.25); background:rgba(245,158,11,.06); border-radius:14px; padding:14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
         .op-item { border:1px solid var(--border); border-radius:12px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; background:rgba(255,255,255,.02); flex-wrap:wrap; }
         .op-item.selected { border-color:rgba(0,212,255,.45); background:rgba(0,212,255,.08); }
         .op-meta small { color:var(--text-muted); display:block; }
-        .op-dist { font-family:var(--font-mono); color:#9cecff; font-size:12px; }
+        .op-dist { font-family:var(--font-mono); color:var(--accent); font-size:12px; }
         .op-out { color:#f59e0b; font-size:11px; font-weight:700; border:1px solid rgba(245,158,11,.4); padding:2px 8px; border-radius:999px; }
         .op-list-empty { color:var(--text-muted); font-size:13px; padding:10px; border:1px dashed var(--border); border-radius:10px; }
         .op-help { color:var(--text-muted); font-size:12px; margin-bottom:10px; }
@@ -715,7 +717,7 @@ foreach ($pedidos as $pp) {
         }
     </style>
 </head>
-<body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
+<body>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo">
@@ -733,21 +735,24 @@ foreach ($pedidos as $pp) {
     </div>
     <nav class="sidebar-nav">
         <div class="nav-section-label">Principal</div>
-        <a href="<?= htmlspecialchars($inicioHref) ?>" class="nav-item"><i class="fa-solid fa-gauge-high"></i><span>Inicio</span></a>
+        <a href="<?= htmlspecialchars($inicioHref) ?>" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>Inicio</span></a>
         <?php if ($esAdmin): ?>
         <a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a>
         <?php endif; ?>
-        <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos e inventario</span></a>
-        <a href="pedidos.php" class="nav-item active"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span><div class="nav-indicator"></div></a>
-        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
-        <?php if ($esAdmin): ?><?php endif; ?>
-        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
+        <a href="pedidos.php" class="nav-item active"><i class="fa-solid fa-receipt"></i><span>Pedidos</span><div class="nav-indicator"></div></a>
         <?php if ($esAdmin): ?>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+        
+        <?php endif; ?>
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        
         <div class="nav-section-label">Operaciones</div>
+        <?php if ($esAdmin): ?>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <?php endif; ?>
-        <div class="nav-section-label">Cuenta</div>
         
+        <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
 </aside>
@@ -759,7 +764,9 @@ foreach ($pedidos as $pp) {
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span class="active">Pedidos</span></div>
         </div>
         <div class="topbar-right">
-            <button id="btnToggleTheme" class="topbar-btn" title="Cambiar Paleta" onclick="toggleTheme()"><i class="fa-solid fa-palette"></i></button>
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
             <div class="topbar-date" id="topbarDate"></div><div class="dropdown">
                 <button class="topbar-btn" type="button" id="panelNotiBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Notificaciones">
                     <i class="fa-solid fa-bell"></i><span class="notif-count hidden" id="panelNotiCount">0</span>
@@ -837,10 +844,14 @@ foreach ($pedidos as $pp) {
                         <th>Resumen productos</th>
                         <th>Cliente</th>
                         <th>Estatus</th>
-                        <th>Operador</th>
+                        <?php if (!$esInventario): ?>
+                        <th>Operador / Punto</th>
+                        <?php endif; ?>
                         <th>Calificacion</th>
+                        <?php if (!$esInventario): ?>
                         <th>Asignar</th>
                         <th>Estado</th>
+                        <?php endif; ?>
                         <th>Historial</th>
                     </tr>
                     </thead>
@@ -848,23 +859,28 @@ foreach ($pedidos as $pp) {
                     <?php foreach ($pedidos as $p): ?>
                         <tr class="pedido-row">
                             <td data-label="Pedido">
-                                <strong>#<?= htmlspecialchars($p['folio_hex'] ?: strtoupper(dechex((int)$p['id']))) ?></strong><br>
+                                <strong>#<?php echo htmlspecialchars(isset($p['folio_hex']) && $p['folio_hex'] ? $p['folio_hex'] : strtoupper(dechex((int)$p['id']))); ?></strong><br>
                                 <small style="color:var(--text-muted);"><?= (int)$p['total_items'] ?> unidad(es)</small>
                             </td>
                             <td data-label="Fecha"><?= htmlspecialchars($p['created_at']) ?></td>
-                            <td data-label="Resumen productos"><small style="color:#d8e6ff;"><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
+                            <td data-label="Resumen productos"><small style="color:var(--accent);font-weight:500;"><?= htmlspecialchars($p['resumen_productos'] ?: 'Sin productos') ?></small></td>
                             <td data-label="Cliente">
                                 <strong><?= htmlspecialchars($p['cliente_nombre']) ?></strong><br>
                                 <small><?= htmlspecialchars($p['cliente_email']) ?></small>
                             </td>
                             <td data-label="Estatus"><span class="status-badge badge-<?= htmlspecialchars($p['estado']) ?>"><?= htmlspecialchars($p['estado']) ?></span></td>
+                            <?php if (!$esInventario): ?>
                             <td data-label="Operador">
                                 <?php if (!empty($p['operador_nombre'])): ?>
-                                    <span class="operador-asignado"><i class="fa-solid fa-user-check"></i> <?= htmlspecialchars((string)$p['operador_nombre']) ?></span>
+                                    <span class="operador-asignado mb-1"><i class="fa-solid fa-user-check"></i> <?= htmlspecialchars((string)$p['operador_nombre']) ?></span>
+                                    <?php if (isset($p['ruta_punto']) && $p['ruta_punto'] > 0): ?>
+                                        <div class="small text-accent fw-bold" style="color: var(--accent);"><i class="fa-solid fa-location-dot"></i> PUNTO <?= $p['ruta_punto'] ?></div>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span style="color:var(--text-muted);font-size:12px;">Sin asignar</span>
                                 <?php endif; ?>
                             </td>
+                            <?php endif; ?>
                             <td data-label="Calificacion">
                                 <?php $cal = $calificacionMap[(int)$p['id']] ?? null; ?>
                                 <?php if ($cal): ?>
@@ -876,7 +892,8 @@ foreach ($pedidos as $pp) {
                                     <span style="color:var(--text-muted);font-size:12px;">Sin calificar</span>
                                 <?php endif; ?>
                             </td>
-<td data-label="Asignar">
+                            <?php if (!$esInventario): ?>
+                            <td data-label="Asignar">
                                 <?php if (($p['estado'] ?? '') === 'pendiente'): ?>
                                     <button
                                         type="button"
@@ -901,6 +918,7 @@ foreach ($pedidos as $pp) {
                                     <button class="btn-primary-custom btn-table" type="submit">Aplicar</button>
                                 </form>
                             </td>
+                            <?php endif; ?>
                             <td data-label="Historial">
                                 <div class="d-flex gap-2 flex-wrap">
                                 <a href="pedidos.php?historial=<?= (int)$p['id'] ?>#detalle-historial" class="btn-secondary-custom btn-table">
@@ -1336,6 +1354,7 @@ if (PEDIDO_ABRIR_ASIGNACION > 0) {
 </script>
 </body>
 </html>
+
 
 
 

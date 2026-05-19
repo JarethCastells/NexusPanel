@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireAuth();
@@ -18,10 +18,11 @@ if (!in_array($tab, ['inicio', 'activos', 'mensajes', 'ayuda'], true)) {
 
 // Mis pedidos activos como operador
 $misActivos = $pdo->prepare("
-    SELECT p.*, {$folioExpr} AS folio_hex, {$sinProductosExpr} AS operador_sin_productos, {$sinProductosAtExpr} AS sin_productos_at, u.nombre AS cli_nombre, u.telefono AS cli_tel, u.domicilio AS cli_dom, u.lat AS cli_lat, u.lng AS cli_lng
+    SELECT p.*, p.ruta_punto, {$folioExpr} AS folio_hex, {$sinProductosExpr} AS operador_sin_productos, {$sinProductosAtExpr} AS sin_productos_at, u.nombre AS cli_nombre, u.telefono AS cli_tel, u.domicilio AS cli_dom, u.lat AS cli_lat, u.lng AS cli_lng
     FROM pedidos p JOIN usuarios u ON u.id=p.cliente_id
     WHERE p.operador_id=? AND p.estado IN ('aceptado','en_camino')
     ORDER BY
+        p.ruta_punto ASC,
         CASE WHEN p.estado='en_camino' THEN 0 WHEN {$sinProductosExpr}=1 THEN 2 ELSE 1 END ASC,
         CASE WHEN {$sinProductosExpr}=1 THEN {$sinProductosAtExpr} ELSE p.updated_at END ASC
 ");
@@ -103,7 +104,7 @@ $pedidoId = (int)($_GET['pedido_id'] ?? ($misActivos[0]['id'] ?? 0));
 $pedidoActivo = null;
 $itemsPedido  = [];
 if ($pedidoId) {
-    $st = $pdo->prepare("SELECT p.*, {$folioExpr} AS folio_hex, u.nombre AS cli_nombre,u.telefono AS cli_tel,u.domicilio AS cli_dom,u.lat AS cli_lat,u.lng AS cli_lng FROM pedidos p JOIN usuarios u ON u.id=p.cliente_id WHERE p.id=?");
+    $st = $pdo->prepare("SELECT p.*, p.ruta_punto, {$folioExpr} AS folio_hex, u.nombre AS cli_nombre,u.telefono AS cli_tel,u.domicilio AS cli_dom,u.lat AS cli_lat,u.lng AS cli_lng FROM pedidos p JOIN usuarios u ON u.id=p.cliente_id WHERE p.id=?");
     $st->execute([$pedidoId]);
     $pedidoActivo = $st->fetch();
     if ($pedidoActivo) {
@@ -163,6 +164,8 @@ if (!empty($allIds)) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <link rel="stylesheet" href="../assets/css/pedidos.css">
     <link rel="stylesheet" href="../assets/css/operador.css">
     <style>
@@ -171,7 +174,7 @@ if (!empty($allIds)) {
         display: flex;
         flex-direction: column;
         height: calc(100vh - 112px);
-        background: #060a12;
+        background: var(--bg-primary);
         width: 100%;
         overflow: hidden;
     }
@@ -271,7 +274,7 @@ if (!empty($allIds)) {
         box-shadow: 0 2px 10px rgba(239,68,68,0.45);
     }
     .notif-count.hidden { display: none; }
-    .op-noti-dropdown { width: 360px; max-width: calc(100vw - 24px); border: 1px solid var(--border); background: #0b1528; z-index: 8000 !important; }
+    .op-noti-dropdown { width: 360px; max-width: calc(100vw - 24px); border: 1px solid var(--border); background: var(--bg-card); z-index: 8000 !important; }
     .topbar { position: relative; z-index: 12000 !important; }
     .topbar .dropdown-menu { z-index: 13000 !important; }
     .delivery-map,
@@ -279,10 +282,10 @@ if (!empty($allIds)) {
     .leaflet-container,
     .leaflet-pane,
     .leaflet-control-container { z-index: 1 !important; }
-    .op-noti-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; color:#fff; }
+    .op-noti-header { padding: 10px 12px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; color: var(--text-primary); }
     .op-noti-list { max-height: 320px; overflow: auto; padding: 8px; display: grid; gap: 8px; }
-    .op-noti-item { display:block; border:1px solid var(--border); border-radius:10px; background:rgba(255,255,255,.02); color:inherit; text-decoration:none; padding:10px; }
-    .op-noti-item strong { display:block; font-size:13px; color:#fff; }
+    .op-noti-item { display:block; border:1px solid var(--border); border-radius:10px; background: var(--bg-tertiary); color:inherit; text-decoration:none; padding:10px; }
+    .op-noti-item strong { display:block; font-size:13px; color: var(--text-primary); }
     .op-noti-item small { display:block; color:var(--text-muted); margin-top:2px; font-size:11px; }
     .op-noti-empty { color:var(--text-muted); font-size:12px; padding:8px; }
     .queue-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
@@ -302,23 +305,22 @@ if (!empty($allIds)) {
     .dbar-btn-warning-tech:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(217,119,6,.28); }
     .label-tu,
     .label-cliente {
-        background: rgba(8, 14, 29, .92);
-        border: 1px solid rgba(0, 212, 255, .45);
-        color: #dff8ff;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
         border-radius: 999px;
         padding: 2px 8px;
         font-size: 11px;
         font-weight: 700;
         letter-spacing: .02em;
-        box-shadow: 0 8px 20px rgba(2, 8, 23, .45);
     }
     .label-tu {
         border-color: rgba(52, 211, 153, .6);
-        color: #b9ffe6;
+        color: var(--success);
     }
     .label-cliente {
         border-color: rgba(96, 165, 250, .6);
-        color: #cfe6ff;
+        color: var(--accent);
     }
     .help-user-item.active { border-color: rgba(0,212,255,.55) !important; box-shadow: 0 0 0 2px rgba(0,212,255,.14) inset; background: rgba(8,34,58,.85) !important; }
     .op-msg-layout {
@@ -330,21 +332,21 @@ if (!empty($allIds)) {
     .op-msg-convos {
         border: 1px solid var(--border);
         border-radius: 14px;
-        background: rgba(7, 16, 32, .9);
+        background: var(--bg-card);
         overflow: auto;
         padding: 8px;
     }
     .op-msg-card {
-        border: 1px solid rgba(64, 91, 140, .45);
+        border: 1px solid var(--border);
         border-radius: 12px;
         padding: 10px;
         margin-bottom: 8px;
-        background: rgba(12, 24, 48, .75);
+        background: var(--bg-tertiary);
         cursor: pointer;
         transition: .2s ease;
     }
-    .op-msg-card:hover { border-color: rgba(0, 212, 255, .55); transform: translateY(-1px); }
-    .op-msg-card.active { border-color: rgba(0, 212, 255, .9); box-shadow: 0 0 0 1px rgba(0, 212, 255, .25) inset; }
+    .op-msg-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .op-msg-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft) inset; }
     .op-msg-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .op-msg-user { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .op-msg-avatar {
@@ -353,24 +355,24 @@ if (!empty($allIds)) {
         background: linear-gradient(135deg, #06b6d4, #2563eb);
         color: #eaf2ff; font-weight: 800; font-size: 13px; flex-shrink: 0;
     }
-    .op-msg-name { font-size: 13px; font-weight: 700; color: #eaf2ff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .op-msg-name { font-size: 13px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .op-msg-folio { font-size: 11px; color: var(--text-muted); }
     .op-msg-status { font-size: 10px; font-weight: 700; text-transform: uppercase; border-radius: 999px; padding: 2px 8px; border: 1px solid transparent; }
-    .op-msg-status.s-en_camino { color: #34d399; border-color: rgba(16,185,129,.45); background: rgba(16,185,129,.14); }
-    .op-msg-status.s-aceptado { color: #fbbf24; border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.14); }
-    .op-msg-last { font-size: 12px; color: #c7d2fe; margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .op-msg-status.s-en_camino { color: var(--success); border-color: rgba(16,185,129,.45); background: rgba(16,185,129,.14); }
+    .op-msg-status.s-aceptado { color: var(--warning); border-color: rgba(245,158,11,.45); background: rgba(245,158,11,.14); }
+    .op-msg-last { font-size: 12px; color: var(--text-muted); margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .op-msg-time { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
     .op-msg-thread {
         border: 1px solid var(--border);
         border-radius: 14px;
-        background: rgba(7, 16, 32, .88);
+        background: var(--bg-card);
         display: grid;
         grid-template-rows: auto 1fr auto;
         min-height: 68vh;
         overflow: hidden;
     }
     .op-thread-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
-    .op-thread-title { font-weight: 700; color: #f8fafc; font-size: 15px; }
+    .op-thread-title { font-weight: 700; color: var(--text-primary); font-size: 15px; }
     .op-thread-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
     .op-thread-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .op-thread-body {
@@ -379,14 +381,14 @@ if (!empty($allIds)) {
         display: grid;
         align-content: start;
         gap: 10px;
-        background: radial-gradient(circle at 12% -8%, rgba(0,212,255,.08), transparent 32%), #070f1f;
+        background: var(--bg-primary);
     }
-    .op-bubble { max-width: min(78%, 560px); border-radius: 14px; padding: 9px 11px; border: 1px solid rgba(79, 111, 175, .45); }
-    .op-bubble.mine { margin-left: auto; background: linear-gradient(135deg, rgba(14,116,255,.27), rgba(0,212,255,.2)); border-color: rgba(56,189,248,.6); }
-    .op-bubble.theirs { margin-right: auto; background: rgba(19, 31, 56, .9); }
-    .op-bubble .sender { font-size: 11px; font-weight: 700; color: #67e8f9; margin-bottom: 4px; }
-    .op-bubble.theirs .sender { color: #c7d2fe; }
-    .op-bubble .text { color: #e5edff; font-size: 13px; line-height: 1.35; white-space: pre-wrap; }
+    .op-bubble { max-width: min(78%, 560px); border-radius: 14px; padding: 9px 11px; border: 1px solid var(--border); }
+    .op-bubble.mine { margin-left: auto; background: var(--accent-soft); border-color: var(--accent); }
+    .op-bubble.theirs { margin-right: auto; background: var(--bg-tertiary); }
+    .op-bubble .sender { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .op-bubble.theirs .sender { color: var(--text-muted); }
+    .op-bubble .text { color: var(--text-primary); font-size: 13px; line-height: 1.35; white-space: pre-wrap; }
     .op-bubble .time { color: var(--text-muted); font-size: 11px; margin-top: 4px; }
     .op-thread-foot {
         border-top: 1px solid var(--border);
@@ -394,7 +396,7 @@ if (!empty($allIds)) {
         grid-template-columns: 1fr auto;
         gap: 8px;
         padding: 10px;
-        background: rgba(9, 16, 30, .92);
+        background: var(--bg-card);
     }
 
     /* Ã¢â€â‚¬Ã¢â€â‚¬ Barra inferior Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -1189,6 +1191,9 @@ if (!empty($allIds)) {
             </div>
         </div>
         <div class="topbar-right">
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
             <div class="topbar-date" id="topbarDate"></div>
             <div class="zona-badge"><i class="fa-solid fa-location-dot"></i> Radio: <?= $u['zona_radio'] ?? 50 ?> km</div>
             <div class="dropdown">
@@ -1261,7 +1266,12 @@ if (!empty($allIds)) {
                         <div class="queue-card">
                             <div class="queue-card-head">
                                 <span class="queue-folio">#<?= htmlspecialchars((string)($viajeEnProceso['folio_hex'] ?: strtoupper(dechex((int)$viajeEnProceso['id'])))) ?></span>
-                                <span class="estado-badge en_camino">En camino</span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <?php if (isset($viajeEnProceso['ruta_punto']) && $viajeEnProceso['ruta_punto'] > 0): ?>
+                                        <span class="badge bg-primary px-2" style="font-size: 10px;">PUNTO <?= $viajeEnProceso['ruta_punto'] ?></span>
+                                    <?php endif; ?>
+                                    <span class="estado-badge en_camino">En camino</span>
+                                </div>
                             </div>
                             <div class="queue-card-title"><?= htmlspecialchars((string)$viajeEnProceso['cli_nombre']) ?></div>
                             <div class="queue-card-row"><i class="fa-solid fa-phone"></i> <?= htmlspecialchars((string)($viajeEnProceso['cli_tel'] ?: 'Sin telefono')) ?></div>
@@ -1291,7 +1301,12 @@ if (!empty($allIds)) {
                                 <div class="queue-card">
                                     <div class="queue-card-head">
                                         <span class="queue-folio">#<?= htmlspecialchars((string)($vpi['folio_hex'] ?: strtoupper(dechex((int)$vpi['id'])))) ?></span>
-                                        <span class="estado-badge aceptado">Aceptado</span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <?php if (isset($vpi['ruta_punto']) && $vpi['ruta_punto'] > 0): ?>
+                                                <span class="badge bg-primary px-2" style="font-size: 10px;">PUNTO <?= $vpi['ruta_punto'] ?></span>
+                                            <?php endif; ?>
+                                            <span class="estado-badge aceptado">Aceptado</span>
+                                        </div>
                                     </div>
                                     <div class="queue-card-title"><?= htmlspecialchars((string)$vpi['cli_nombre']) ?></div>
                                     <div class="queue-card-row"><i class="fa-solid fa-location-dot"></i> <?= htmlspecialchars((string)($vpi['domicilio_entrega'] ?: $vpi['cli_dom'] ?: 'Sin direccion')) ?></div>
@@ -1362,7 +1377,7 @@ if (!empty($allIds)) {
                     <div class="op-msg-thread">
                         <div class="op-thread-head">
                             <div>
-                                <div class="op-thread-title" id="msgThreadTitle">Selecciona una conversaciÃ³n</div>
+                                <div class="op-thread-title" id="msgThreadTitle">Selecciona una conversación</div>
                                 <div class="op-thread-sub" id="msgThreadSub">Abre una carta para ver el chat.</div>
                             </div>
                             <div class="op-thread-actions">
@@ -1372,7 +1387,7 @@ if (!empty($allIds)) {
                             </div>
                         </div>
                         <div class="op-thread-body" id="msgThreadBody">
-                            <div style="color:var(--text-muted);font-size:13px;">No hay conversaciÃ³n seleccionada.</div>
+                            <div style="color:var(--text-muted);font-size:13px;">No hay conversación seleccionada.</div>
                         </div>
                         <form class="op-thread-foot" id="msgThreadForm">
                             <input type="text" id="msgThreadInput" class="modal-input" placeholder="Escribe un mensaje al cliente..." disabled>
@@ -1464,6 +1479,9 @@ if (!empty($allIds)) {
                     <a href="operador_pedidos.php?tab=activos&pedido_id=<?= $p['id'] ?>" class="pedido-item <?= $p['id']==$pedidoId?'active':'' ?>">
                         <div class="pedido-item-header">
                             <span class="pedido-num">#<?= htmlspecialchars((string)($p['folio_hex'] ?: strtoupper(dechex((int)$p['id'])))) ?></span>
+                            <?php if (isset($p['ruta_punto']) && $p['ruta_punto'] > 0): ?>
+                                <span class="badge bg-primary px-2" style="font-size: 9px; letter-spacing: 0.5px;">PUNTO <?= $p['ruta_punto'] ?></span>
+                            <?php endif; ?>
                             <span class="pedido-estado-pill" style="background:<?= $p['estado']==='en_camino'?'rgba(0,212,255,0.15)':($p['estado']==='aceptado'?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)') ?>;color:<?= $p['estado']==='en_camino'?'var(--primary)':($p['estado']==='aceptado'?'var(--success)':'#f59e0b') ?>;border:1px solid <?= $p['estado']==='en_camino'?'rgba(0,212,255,0.3)':($p['estado']==='aceptado'?'rgba(16,185,129,0.3)':'rgba(245,158,11,0.3)') ?>">
                                 <?= $p['estado']==='en_camino'?'En camino':'Aceptado' ?>
                             </span>
@@ -1486,6 +1504,9 @@ if (!empty($allIds)) {
 
                         <!-- Pill de estado flotante arriba izquierda -->
                         <div class="delivery-status-pill" id="statusPill">
+                            <?php if (isset($pedidoActivo['ruta_punto']) && $pedidoActivo['ruta_punto'] > 0): ?>
+                                <span class="badge bg-primary me-2">PUNTO <?= $pedidoActivo['ruta_punto'] ?></span>
+                            <?php endif; ?>
                             <?php if ($pedidoActivo['estado'] === 'en_camino'): ?>
                             <span class="pill-dot blink"></span> Compartiendo ubicacion
                             <?php else: ?>
@@ -1976,7 +1997,7 @@ function updateMensajesThreadHeader() {
     const send = document.getElementById('msgThreadSend');
     if (!title || !sub || !btn || !input || !send) return;
     if (!conv) {
-        title.textContent = 'Selecciona una conversaciÃ³n';
+        title.textContent = 'Selecciona una conversación';
         sub.textContent = 'Abre una carta para ver el chat.';
         btn.style.display = 'none';
         input.disabled = true;

@@ -18,7 +18,7 @@ define('TRACKING_SHARE_SECRET', 'cambia-esta-clave-super-larga-en-produccion');
 // URL base publica para links compartidos (sin slash final).
 // Ejemplo LAN: http://192.168.1.50/login-demo
 // Ejemplo internet: https://tudominio.com/login-demo
-define('APP_PUBLIC_BASE_URL', 'http://localhost/login-demo');
+define('APP_PUBLIC_BASE_URL', 'http://localhost:8080');
 
 // Turnstile desactivado para la demo estable (evita dependencia externa).
 // Si luego lo reactivas, coloca aqui tus llaves reales.

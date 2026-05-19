@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireGestion();
@@ -105,6 +105,8 @@ if ($clienteId > 0) {
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .clientes-layout { display:flex; gap:16px; height:calc(100vh - 64px); }
         .modal-input { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--bg-input); color:var(--text-primary); outline:none; }
@@ -145,17 +147,24 @@ if ($clienteId > 0) {
     </div>
     <nav class="sidebar-nav">
         <div class="nav-section-label">Principal</div>
-        <a href="<?= htmlspecialchars($inicioHref) ?>" class="nav-item"><i class="fa-solid fa-gauge-high"></i><span>Inicio</span></a>
+        <a href="<?= htmlspecialchars($inicioHref) ?>" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>Inicio</span></a>
         <?php if ($esAdmin): ?>
         <a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a>
+        <a href="clientes.php" class="nav-item active"><i class="fa-solid fa-user-group"></i><span>Clientes</span><div class="nav-indicator"></div></a>
         <?php endif; ?>
-        <a href="productos.php" class="nav-item"><i class="fa-solid fa-pills"></i><span>Productos</span></a>
-        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-clipboard-check"></i><span>Pedidos</span></a>
-        <a href="inventario.php" class="nav-item"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span></a>
+        <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
+        <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
         <?php if ($esAdmin): ?>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+        
+        <?php endif; ?>
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        
         <div class="nav-section-label">Operaciones</div>
+        <?php if ($esAdmin): ?>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <?php endif; ?>
+        
         <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
@@ -167,7 +176,12 @@ if ($clienteId > 0) {
             <button class="mobile-menu-btn" id="mobileMenu"><i class="fa-solid fa-bars"></i></button>
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span class="active">Clientes</span></div>
         </div>
-        <div class="topbar-right"><div class="topbar-date" id="topbarDate"></div></div>
+        <div class="topbar-right">
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
+            <div class="topbar-date" id="topbarDate"></div>
+        </div>
     </header>
 
     <div class="content-area" style="padding:0;">
@@ -267,3 +281,4 @@ if ($clienteId > 0) {
 <script src="../assets/js/dashboard.js"></script>
 </body>
 </html>
+

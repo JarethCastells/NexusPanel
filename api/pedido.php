@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 
@@ -907,6 +907,7 @@ switch ($action) {
                 LEFT JOIN usuarios c ON c.id = p.cliente_id
                 LEFT JOIN usuarios o ON o.id = p.operador_id
                 WHERE h.estado IN ('aceptado', 'en_camino', 'entregado', 'cancelado', 'calificado')
+                  AND h.created_at >= NOW() - INTERVAL 48 HOUR
                 ORDER BY h.id DESC
                 LIMIT {$limit}
             ");
@@ -953,6 +954,7 @@ switch ($action) {
                 FROM pedido_calificaciones pc
                 JOIN pedidos p ON p.id = pc.pedido_id
                 LEFT JOIN usuarios c ON c.id = p.cliente_id
+                WHERE pc.created_at >= NOW() - INTERVAL 48 HOUR
                 ORDER BY pc.id DESC
                 LIMIT {$limit}
             ");
@@ -984,6 +986,7 @@ switch ($action) {
                 FROM chat_ayuda_operador cao
                 JOIN usuarios ru ON ru.id = cao.remitente_id
                 WHERE ru.rol = 'operador'
+                  AND cao.ts >= NOW() - INTERVAL 48 HOUR
                 ORDER BY cao.id DESC
                 LIMIT {$limit}
             ");

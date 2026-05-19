@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireAdmin();
@@ -167,34 +167,36 @@ $usuariosMapa = array_values(array_map(static function ($u) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .usuarios-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 16px; }
         .usuarios-mapa { height: 340px; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; }
         .perfil-card-list { display: grid; gap: 12px; }
-        .perfil-card { border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,0.02); overflow: hidden; }
+        .perfil-card { border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); overflow: hidden; }
         .perfil-card-head { display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; }
         .perfil-foto { width:48px; height:48px; border-radius:50%; object-fit:cover; border:1px solid var(--border); }
         .perfil-main { flex:1; min-width:0; }
         .perfil-nombre { font-weight:600; color:var(--text-primary); display:flex; align-items:center; gap:8px; }
-        .perfil-sub { color:var(--text-dim); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .badge-new { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid rgba(16,185,129,0.4); color:#6ee7b7; }
-        .perfil-toggle { color: var(--primary); }
+        .perfil-sub { color:var(--text-muted); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .badge-new { font-size:10px; padding:2px 8px; border-radius:999px; border:1px solid var(--success); color:var(--success); background:rgba(16,185,129,0.1); }
+        .perfil-toggle { color: var(--accent); }
         .perfil-body { display:none; padding:0 14px 14px; border-top:1px solid var(--border); }
         .perfil-card.open .perfil-body { display:block; }
         .perfil-meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px; }
-        .meta-box { background:var(--bg-input); border:1px solid var(--border); border-radius:10px; padding:10px; }
-        .meta-label { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.6px; }
+        .meta-box { background:var(--input-bg); border:1px solid var(--border); border-radius:10px; padding:10px; }
+        .meta-label { font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:.6px; }
         .meta-value { font-size:13px; color:var(--text-primary); margin-top:4px; }
         .cat-chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-        .cat-chip { font-size:11px; padding:5px 9px; border-radius:999px; background:rgba(0,212,255,0.12); border:1px solid rgba(0,212,255,0.22); color:#7dd3fc; }
+        .cat-chip { font-size:11px; padding:5px 9px; border-radius:999px; background:var(--accent-soft); border:1px solid var(--border-focus); color:var(--accent); }
         .table-wrapper { overflow-x:auto; -webkit-overflow-scrolling:touch; }
         .data-table { min-width: 980px; }
-        .modal-dark .modal-content { background: var(--bg-card); border:1px solid var(--border); border-radius:16px; color:var(--text-primary); }
+        .modal-dark .modal-content { background: var(--card-bg); border:1px solid var(--border); border-radius:16px; color:var(--text-primary); }
         .modal-dark .modal-header { border-bottom:1px solid var(--border); padding:20px 24px; }
         .modal-dark .modal-footer { border-top:1px solid var(--border); }
-        .modal-dark .btn-close { filter: invert(1) opacity(0.5); }
-        .modal-input, .modal-select { width:100%; padding:12px 16px; background:var(--bg-input); border:1px solid var(--border); border-radius:10px; color:var(--text-primary); font-size:14px; }
-        .btn-primary-custom { background:linear-gradient(135deg,var(--primary),var(--accent)); border:none; color:#fff; padding:10px 24px; border-radius:10px; font-weight:600; }
+        .modal-dark .btn-close { opacity: 0.8; }
+        .modal-input, .modal-select { width:100%; padding:12px 16px; background:var(--input-bg); border:1px solid var(--border); border-radius:10px; color:var(--text-primary); font-size:14px; }
+        .btn-primary-custom { background:linear-gradient(135deg,var(--accent),var(--accent-hover)); border:none; color:#fff; padding:10px 24px; border-radius:10px; font-weight:600; }
         .btn-secondary-custom { background:none; border:1px solid var(--border); color:var(--text-muted); padding:10px 24px; border-radius:10px; }
         .action-btn { width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px; }
         .action-btn.toggle-btn { color: var(--warning); }
@@ -205,7 +207,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             padding: 10px 12px;
             border-radius: 10px;
             border: 1px solid var(--border);
-            background: var(--bg-input);
+            background: var(--input-bg);
             color: var(--text-primary);
             font-size: 13px;
             margin-bottom: 12px;
@@ -231,7 +233,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             width: 360px;
             max-width: calc(100vw - 24px);
             border: 1px solid var(--border);
-            background: #0b1528;
+            background: var(--card-bg);
         }
         .panel-noti-header {
             padding: 10px 12px;
@@ -239,7 +241,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: #fff;
+            color: var(--text-primary);
         }
         .panel-noti-list {
             max-height: 320px;
@@ -252,12 +254,12 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             display: block;
             border: 1px solid var(--border);
             border-radius: 10px;
-            background: rgba(255,255,255,.02);
+            background: var(--bg-tertiary);
             color: inherit;
             text-decoration: none;
             padding: 10px;
         }
-        .panel-noti-item strong { display: block; font-size: 13px; color: #fff; }
+        .panel-noti-item strong { display: block; font-size: 13px; color: var(--text-primary); }
         .panel-noti-item small { display: block; color: var(--text-muted); margin-top: 2px; font-size: 11px; }
         @media (max-width: 980px) {
             .usuarios-grid { grid-template-columns: 1fr; }
@@ -278,7 +280,7 @@ $usuariosMapa = array_values(array_map(static function ($u) {
         }
     </style>
 </head>
-<body data-theme="<?= function_exists('temaActual') ? htmlspecialchars(temaActual()) : 'dark' ?>">
+<body>
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo"><div class="logo-icon-sm"><i class="fa-solid fa-hexagon-nodes"></i></div><span class="logo-text-sm">Nexus<strong>Panel</strong></span></div>
@@ -296,8 +298,11 @@ $usuariosMapa = array_values(array_map(static function ($u) {
         <a href="usuarios.php" class="nav-item active"><i class="fa-solid fa-users"></i><span>Usuarios</span><div class="nav-indicator"></div></a>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
-        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a>
-        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a><div class="nav-section-label">Operaciones</div>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+        
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+
+        <div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <div class="nav-section-label">Cuenta</div>
         
@@ -312,7 +317,9 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span>Admin</span><i class="fa-solid fa-chevron-right"></i><span class="active">Usuarios</span></div>
         </div>
         <div class="topbar-right">
-            <button id="btnToggleTheme" class="topbar-btn" title="Cambiar Paleta" onclick="toggleTheme()"><i class="fa-solid fa-palette"></i></button>
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
             <div class="topbar-date" id="topbarDate"></div>
             <div class="dropdown">
                 <button class="topbar-btn" type="button" id="panelNotiBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Notificaciones">
@@ -342,8 +349,8 @@ $usuariosMapa = array_values(array_map(static function ($u) {
             </button>
         </div>
 
-        <?php if ($msg): ?><div class="alert-custom alert-success" style="margin-bottom:20px;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:#6ee7b7;font-size:14px;"><i class="fa-solid fa-circle-check"></i><?= htmlspecialchars($msg) ?></div><?php endif; ?>
-        <?php if ($error): ?><div class="alert-custom alert-error" style="margin-bottom:20px;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:14px;"><i class="fa-solid fa-circle-exclamation"></i><?= htmlspecialchars($error) ?></div><?php endif; ?>
+        <?php if ($msg): ?><div class="alert-custom alert-success" style="margin-bottom:20px;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;border:1px solid var(--success);color:var(--success);font-size:14px;"><i class="fa-solid fa-circle-check"></i><?= htmlspecialchars($msg) ?></div><?php endif; ?>
+        <?php if ($error): ?><div class="alert-custom alert-error" style="margin-bottom:20px;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:12px;border:1px solid var(--danger);color:var(--danger);font-size:14px;"><i class="fa-solid fa-circle-exclamation"></i><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
         <div class="usuarios-grid">
             <div class="card-panel">
@@ -581,6 +588,7 @@ initPanelNotis();
 </script>
 </body>
 </html>
+
 
 
 

@@ -189,6 +189,18 @@ try {
         $log[] = ['skip', "Productos ya existen ($countP registros) — seed omitido"];
     }
 
+    // ── MÓDULO LOGÍSTICA ─────────────────────────────────────
+    $sqlLogistica = file_get_contents('sql/modulo_logistica.sql');
+    // Limpiamos comentarios de línea y dividimos por ; para ejecutar sentencias individuales si es necesario,
+    // pero PDO permite múltiples sentencias si se configura correctamente. 
+    // Para mayor compatibilidad, ejecutaremos el bloque completo.
+    try {
+        $pdo->exec($sqlLogistica);
+        $log[] = ['ok', 'Módulo Logística: Tablas y datos demo (Rojas/PLs) cargados correctamente'];
+    } catch (PDOException $e) {
+        $log[] = ['err', 'Error en Módulo Logística: ' . $e->getMessage()];
+    }
+
 } catch (PDOException $e) {
     $log[] = ['err', 'Error fatal: ' . $e->getMessage()];
     $errores++;

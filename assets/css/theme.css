@@ -1,0 +1,285 @@
+/* Design System - NexusPanel Premium Themes */
+:root {
+    /* Light Mode Tokens (Default) */
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f1f5f9;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --text-muted: #64748b;
+    --text-light: #94a3b8;
+    --accent: #0ea5e9;
+    --accent-hover: #0284c7;
+    --accent-soft: rgba(14, 165, 233, 0.1);
+    --border: #e2e8f0;
+    --border-focus: #bae6fd;
+    --card-bg: #ffffff;
+    --card-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --sidebar-bg: #065f46;
+    --sidebar-text: #ecfdf5;
+    --topbar-bg: rgba(255, 255, 255, 0.8);
+    --input-bg: #ffffff;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --btn-close-filter: none;
+}
+
+[data-theme="dark"] {
+    /* Dark Mode Tokens */
+    --bg-primary: #020617;
+    --bg-secondary: #0f172a;
+    --bg-tertiary: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #e2e8f0;
+    --text-muted: #94a3b8;
+    --text-light: #64748b;
+    --accent: #0ea5e9;
+    --accent-hover: #38bdf8;
+    --accent-soft: rgba(14, 165, 233, 0.15);
+    --border: #1e293b;
+    --border-focus: #0ea5e9;
+    --card-bg: #0f172a;
+    --card-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+    --sidebar-bg: #020617;
+    --sidebar-text: #94a3b8;
+    --topbar-bg: rgba(2, 6, 23, 0.8);
+    --input-bg: #1e293b;
+    --success: #34d399;
+    --danger: #f87171;
+    --warning: #fbbf24;
+    --btn-close-filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* Global Styles using Variables */
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.card, .card-panel, .stat-card {
+    background-color: var(--card-bg) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+.sidebar {
+    background-color: var(--sidebar-bg) !important;
+    border-right: 1px solid var(--border) !important;
+}
+
+.sidebar-nav .nav-item {
+    color: var(--sidebar-text) !important;
+}
+
+/* Light mode hover/active */
+[data-theme="palette"] .sidebar-nav .nav-item:hover,
+[data-theme="palette"] .sidebar-nav .nav-item.active {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+}
+
+/* Dark mode hover/active */
+[data-theme="dark"] .sidebar-nav .nav-item:hover,
+[data-theme="dark"] .sidebar-nav .nav-item.active {
+    background-color: var(--accent-soft) !important;
+    color: var(--accent) !important;
+}
+
+/* Light‑mode welcome banner */
+[data-theme="palette"] .welcome-banner,
+body[data-theme="palette"] .welcome-banner {
+    background: linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%) !important;
+    border-color: #bae6fd !important;
+}
+[data-theme="palette"] .welcome-banner h1,
+body[data-theme="palette"] .welcome-banner h1,
+[data-theme="palette"] .welcome-banner p,
+body[data-theme="palette"] .welcome-banner p {
+    color: #0f172a !important;
+}
+/* Badge styles in light mode */
+[data-theme="palette"] .badge-admin,
+body[data-theme="palette"] .badge-admin {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #b45309 !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+[data-theme="palette"] .badge-operator,
+body[data-theme="palette"] .badge-operator {
+    background: rgba(14, 165, 233, 0.15) !important;
+    color: #0369a1 !important;
+    border: 1px solid rgba(14, 165, 233, 0.3) !important;
+}
+/* Button positioning inside welcome banner */
+.welcome-banner .btn-primary {
+    display: block;
+    margin-top: 1rem;
+    margin-left: auto;
+}
+
+/* Light-only Sidebar Overrides (Green Theme) */
+[data-theme="palette"] .sidebar-nav .nav-item, 
+:root:not([data-theme="dark"]) .sidebar-nav .nav-item {
+    opacity: 0.85;
+}
+
+/* Light‑only overrides (already defined above) */
+[data-theme="palette"] .sidebar-nav .nav-item:hover,
+[data-theme="palette"] .sidebar-nav .nav-item.active {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    opacity: 1;
+}
+
+/* Ensure dark mode does NOT inherit the light‑only opacity rule */
+[data-theme="dark"] .sidebar-nav .nav-item:hover,
+[data-theme="dark"] .sidebar-nav .nav-item.active {
+    opacity: 1;
+}
+
+[data-theme="palette"] .sidebar-header .logo-text, 
+[data-theme="palette"] .sidebar-header .logo-text-sm,
+:root:not([data-theme="dark"]) .sidebar-header .logo-text,
+:root:not([data-theme="dark"]) .sidebar-header .logo-text-sm {
+    color: #ffffff !important;
+}
+
+/* User info – always use high‑contrast colors */
+[data-theme="palette"] .sidebar-user .user-name,
+:root:not([data-theme="dark"]) .sidebar-user .user-name {
+    color: #ffffff !important;
+}
+
+[data-theme="palette"] .sidebar-user .user-role,
+:root:not([data-theme="dark"]) .sidebar-user .user-role {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+[data-theme="dark"] .sidebar-user .user-name,
+[data-theme="dark"] .sidebar-user .user-role {
+    color: var(--sidebar-text) !important;
+}
+
+.topbar {
+    background-color: var(--topbar-bg) !important;
+    border-bottom: 1px solid var(--border) !important;
+    backdrop-filter: blur(8px);
+}
+
+.data-table thead th {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-secondary) !important;
+    border-bottom: 1px solid var(--border) !important;
+}
+
+.data-table tbody td {
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+.form-input, .modal-input, input {
+    background-color: var(--input-bg) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Ensure placeholder text stays readable */
+.form-input::placeholder, .modal-input::placeholder {
+    color: var(--text-muted) !important;
+    opacity: 0.7;
+}
+
+.form-input:focus, .modal-input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+
+/* Dark‑mode overrides for focused inputs – keep accent visible */
+[data-theme="dark"] .form-input:focus, [data-theme="dark"] .modal-input:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-soft) !important;
+}
+
+/* Sidebar Specific Overrides – Emerald Gradient only in Light Mode */
+[data-theme="palette"] .sidebar-logo .logo-icon-sm,
+[data-theme="palette"] .sidebar-user .user-avatar {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* Dark mode – keep sidebar simple */
+[data-theme="dark"] .sidebar-logo .logo-icon-sm,
+[data-theme="dark"] .sidebar-user .user-avatar {
+    background: var(--sidebar-bg) !important;
+    box-shadow: none !important;
+}
+
+[data-theme="palette"] .sidebar-nav .nav-item.active .nav-indicator,
+:root:not([data-theme="dark"]) .sidebar-nav .nav-item.active .nav-indicator {
+    background: #ffffff !important;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.5) !important;
+}
+
+[data-theme="palette"] .sidebar-nav .nav-badge,
+:root:not([data-theme="dark"]) .sidebar-nav .nav-badge {
+    background: #ffffff !important;
+    color: #065f46 !important;
+}
+
+/* Scrollbar styling for dark mode */
+[data-theme="dark"] ::-webkit-scrollbar {
+    width: 10px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 5px;
+}
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: var(--border);
+}
+
+/* Global Table Styles for Themes */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-primary);
+    --bs-table-hover-bg: var(--bg-tertiary);
+    --bs-table-hover-color: var(--text-primary);
+    --bs-table-border-color: var(--border);
+    --bs-table-striped-color: var(--text-primary);
+    --bs-table-active-color: var(--text-primary);
+    background: transparent !important;
+    color: var(--text-primary) !important;
+}
+.table td, .table th {
+    background-color: transparent !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+.table-hover tbody tr:hover td, .table-hover tbody tr:hover th {
+    background-color: var(--bg-tertiary) !important;
+}
+
+/* Global Form Controls for Themes */
+.form-control, .form-select {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+}
+.form-control:focus, .form-select:focus {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 0.25rem rgba(var(--accent-rgb, 14, 165, 233), 0.25) !important;
+}
+.form-control::placeholder {
+    color: var(--text-secondary) !important;
+}
+.form-control:disabled, .form-control[readonly] {
+    background-color: rgba(0,0,0,0.1) !important;
+    opacity: 0.7;
+}

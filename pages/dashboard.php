@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireAuth();
@@ -11,10 +11,7 @@ if ($usuario['rol'] === 'operador') {
     header('Location: operador_pedidos.php?tab=pendientes');
     exit;
 }
-if ($usuario['rol'] === 'cliente') {
-    header('Location: mis_pedidos.php');
-    exit;
-}
+
 if ($isInventario) {
     header('Location: pedidos.php');
     exit;
@@ -86,6 +83,8 @@ for ($d = 1; $d <= $diasMes; $d++) {
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .notif-count {
             position: absolute;
@@ -165,7 +164,11 @@ for ($d = 1; $d <= $diasMes; $d++) {
         <a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
-        <a href="logistica_masiva.php" class="nav-item"><i class="fa-solid fa-truck-ramp-box"></i><span>Logistica Masiva</span></a><a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        <?php if ($isAdmin): ?>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+
+        <?php endif; ?>
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
 
         <div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
@@ -183,6 +186,10 @@ for ($d = 1; $d <= $diasMes; $d++) {
         </div>
         <div class="topbar-right">
             <div class="topbar-date" id="topbarDate"></div>
+            
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
 
             <div class="dropdown">
                 <button class="topbar-btn" type="button" id="panelNotiBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Notificaciones">

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 requireAdmin();
@@ -43,6 +43,8 @@ $modulos = $pdo->query("SELECT DISTINCT modulo FROM auditoria_eventos ORDER BY m
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../assets/css/theme.css">
+    <script src="../assets/js/theme.js"></script>
     <style>
         .toolbar { display:grid; grid-template-columns: 1.5fr 1fr auto; gap:10px; }
         .table-wrapper { overflow-x:auto; }
@@ -64,10 +66,16 @@ $modulos = $pdo->query("SELECT DISTINCT modulo FROM auditoria_eventos ORDER BY m
         <div class="nav-section-label">Principal</div>
         <a href="dashboard.php" class="nav-item"><i class="fa-solid fa-chart-line"></i><span>Inicio</span></a>
         <a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a>
-        <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos</span></a>
+        <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
-        <a href="inventario.php" class="nav-item"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span></a>
+        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
+        
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        
+        <div class="nav-section-label">Operaciones</div>
+        <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <a href="auditoria.php" class="nav-item active"><i class="fa-solid fa-user-shield"></i><span>Auditoria</span><div class="nav-indicator"></div></a>
+        
         <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>
     </nav>
@@ -79,7 +87,12 @@ $modulos = $pdo->query("SELECT DISTINCT modulo FROM auditoria_eventos ORDER BY m
             <button class="mobile-menu-btn" id="mobileMenu"><i class="fa-solid fa-bars"></i></button>
             <div class="breadcrumb-custom"><span>NexusPanel</span><i class="fa-solid fa-chevron-right"></i><span class="active">Auditoria</span></div>
         </div>
-        <div class="topbar-right"><div class="topbar-date" id="topbarDate"></div></div>
+        <div class="topbar-right">
+            <button class="topbar-btn theme-toggle" onclick="toggleTheme()" title="Cambiar tema">
+                <i class="fa-solid fa-moon theme-toggle-icon"></i>
+            </button>
+            <div class="topbar-date" id="topbarDate"></div>
+        </div>
     </header>
 
     <div class="content-area">
@@ -125,3 +138,4 @@ $modulos = $pdo->query("SELECT DISTINCT modulo FROM auditoria_eventos ORDER BY m
 <script src="../assets/js/dashboard.js"></script>
 </body>
 </html>
+
