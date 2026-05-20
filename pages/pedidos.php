@@ -41,6 +41,62 @@ function ensureEmailDashboardSchema(PDO $pdo): void {
     if (!indexExists($pdo, 'email_inbox_messages', 'idx_email_inbox_review_status')) {
         $pdo->exec("ALTER TABLE email_inbox_messages ADD INDEX idx_email_inbox_review_status (review_status)");
     }
+
+    if (!tableExists($pdo, 'mail_accounts')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS mail_accounts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email VARCHAR(190) NOT NULL,
+                provider VARCHAR(80) NULL,
+                imap_host VARCHAR(190) NOT NULL,
+                imap_port INT NOT NULL DEFAULT 993,
+                imap_secure TINYINT(1) NOT NULL DEFAULT 1,
+                imap_user VARCHAR(190) NOT NULL,
+                imap_pass VARCHAR(255) NOT NULL,
+                imap_mailbox VARCHAR(120) NOT NULL DEFAULT 'INBOX',
+                imap_only_unseen TINYINT(1) NOT NULL DEFAULT 1,
+                smtp_host VARCHAR(190) NULL,
+                smtp_port INT NULL,
+                smtp_secure VARCHAR(20) NULL,
+                smtp_user VARCHAR(190) NULL,
+                smtp_pass VARCHAR(255) NULL,
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                created_by INT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                KEY idx_mail_accounts_active (is_active)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+
+    // Bootstrap demo: migrar cuenta de .env a BD una sola vez si no hay cuentas.
+    $hasEnvMail = MAIL_IMAP_HOST !== '' && MAIL_IMAP_USER !== '' && MAIL_IMAP_PASS !== '';
+    if ($hasEnvMail) {
+        $countAccounts = (int)$pdo->query("SELECT COUNT(*) FROM mail_accounts")->fetchColumn();
+        if ($countAccounts === 0) {
+            $ins = $pdo->prepare("
+                INSERT INTO mail_accounts
+                (email, provider, imap_host, imap_port, imap_secure, imap_user, imap_pass, imap_mailbox, imap_only_unseen, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, is_active, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)
+            ");
+            $ins->execute([
+                MAIL_IMAP_USER,
+                'ENV Bootstrap',
+                MAIL_IMAP_HOST,
+                (int)MAIL_IMAP_PORT,
+                MAIL_IMAP_SECURE ? 1 : 0,
+                MAIL_IMAP_USER,
+                MAIL_IMAP_PASS,
+                MAIL_IMAP_MAILBOX,
+                MAIL_IMAP_ONLY_UNSEEN ? 1 : 0,
+                MAIL_SMTP_HOST !== '' ? MAIL_SMTP_HOST : null,
+                (int)MAIL_SMTP_PORT > 0 ? (int)MAIL_SMTP_PORT : null,
+                MAIL_SMTP_SECURE !== '' ? MAIL_SMTP_SECURE : null,
+                MAIL_SMTP_USER !== '' ? MAIL_SMTP_USER : null,
+                MAIL_SMTP_PASS !== '' ? MAIL_SMTP_PASS : null,
+            ]);
+        }
+    }
 }
 
 ensureEmailDashboardSchema($pdo);
@@ -56,6 +112,151 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             require_once '../workers/imap_reader.php';
             $result = readInboxMessages($pdo, 30);
             $msg = 'Sincronizacion IMAP completada. Guardados: ' . (int)$result['saved'] . ', omitidos: ' . (int)$result['skipped'] . '.';
+        } elseif ($action === 'add_mail_account') {
+            $email = trim((string)($_POST['email'] ?? ''));
+            $provider = trim((string)($_POST['provider'] ?? ''));
+            $imapHost = trim((string)($_POST['imap_host'] ?? ''));
+            $imapPort = (int)($_POST['imap_port'] ?? 993);
+            $imapSecure = (int)($_POST['imap_secure'] ?? 1) === 1 ? 1 : 0;
+            $imapUser = trim((string)($_POST['imap_user'] ?? ''));
+            $imapPass = trim((string)($_POST['imap_pass'] ?? ''));
+            $imapMailbox = trim((string)($_POST['imap_mailbox'] ?? 'INBOX'));
+            $imapOnlyUnseen = (int)($_POST['imap_only_unseen'] ?? 1) === 1 ? 1 : 0;
+            $smtpHost = trim((string)($_POST['smtp_host'] ?? ''));
+            $smtpPort = (int)($_POST['smtp_port'] ?? 465);
+            $smtpSecure = trim((string)($_POST['smtp_secure'] ?? 'ssl'));
+            $smtpUser = trim((string)($_POST['smtp_user'] ?? ''));
+            $smtpPass = trim((string)($_POST['smtp_pass'] ?? ''));
+            $isActive = (int)($_POST['is_active'] ?? 1) === 1 ? 1 : 0;
+
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Correo invalido para la cuenta.');
+            }
+            if ($imapHost === '' || $imapUser === '' || $imapPass === '') {
+                throw new RuntimeException('Faltan datos IMAP obligatorios.');
+            }
+
+            if ($isActive === 1) {
+                $activeCount = (int)$pdo->query("SELECT COUNT(*) FROM mail_accounts WHERE is_active = 1")->fetchColumn();
+                if ($activeCount >= 2) {
+                    throw new RuntimeException('Solo se permiten 2 cuentas activas. Desactiva una antes de agregar otra activa.');
+                }
+            }
+
+            $pdo->prepare("
+                INSERT INTO mail_accounts
+                (email, provider, imap_host, imap_port, imap_secure, imap_user, imap_pass, imap_mailbox, imap_only_unseen, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, is_active, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ")->execute([
+                $email,
+                $provider !== '' ? mb_substr($provider, 0, 80) : null,
+                mb_substr($imapHost, 0, 190),
+                $imapPort > 0 ? $imapPort : 993,
+                $imapSecure,
+                mb_substr($imapUser, 0, 190),
+                mb_substr($imapPass, 0, 255),
+                $imapMailbox !== '' ? mb_substr($imapMailbox, 0, 120) : 'INBOX',
+                $imapOnlyUnseen,
+                $smtpHost !== '' ? mb_substr($smtpHost, 0, 190) : null,
+                $smtpPort > 0 ? $smtpPort : null,
+                $smtpSecure !== '' ? mb_substr($smtpSecure, 0, 20) : null,
+                $smtpUser !== '' ? mb_substr($smtpUser, 0, 190) : null,
+                $smtpPass !== '' ? mb_substr($smtpPass, 0, 255) : null,
+                $isActive,
+                (int)($usuario['usuario_id'] ?? 0),
+            ]);
+            $msg = 'Cuenta de correo guardada correctamente.';
+        } elseif ($action === 'update_mail_account') {
+            $accountId = (int)($_POST['account_id'] ?? 0);
+            $email = trim((string)($_POST['email'] ?? ''));
+            $provider = trim((string)($_POST['provider'] ?? ''));
+            $imapHost = trim((string)($_POST['imap_host'] ?? ''));
+            $imapPort = (int)($_POST['imap_port'] ?? 993);
+            $imapSecure = (int)($_POST['imap_secure'] ?? 1) === 1 ? 1 : 0;
+            $imapUser = trim((string)($_POST['imap_user'] ?? ''));
+            $imapPass = trim((string)($_POST['imap_pass'] ?? ''));
+            $imapMailbox = trim((string)($_POST['imap_mailbox'] ?? 'INBOX'));
+            $imapOnlyUnseen = (int)($_POST['imap_only_unseen'] ?? 1) === 1 ? 1 : 0;
+            $smtpHost = trim((string)($_POST['smtp_host'] ?? ''));
+            $smtpPort = (int)($_POST['smtp_port'] ?? 465);
+            $smtpSecure = trim((string)($_POST['smtp_secure'] ?? 'ssl'));
+            $smtpUser = trim((string)($_POST['smtp_user'] ?? ''));
+            $smtpPass = trim((string)($_POST['smtp_pass'] ?? ''));
+            $isActive = (int)($_POST['is_active'] ?? 1) === 1 ? 1 : 0;
+
+            if ($accountId <= 0) {
+                throw new RuntimeException('Cuenta de correo invalida para editar.');
+            }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Correo invalido para la cuenta.');
+            }
+            if ($imapHost === '' || $imapUser === '') {
+                throw new RuntimeException('Faltan datos IMAP obligatorios.');
+            }
+
+            $stCurrent = $pdo->prepare("SELECT imap_pass, smtp_pass FROM mail_accounts WHERE id = ? LIMIT 1");
+            $stCurrent->execute([$accountId]);
+            $curr = $stCurrent->fetch();
+            if (!$curr) {
+                throw new RuntimeException('No se encontro la cuenta para editar.');
+            }
+
+            if ($isActive === 1) {
+                $stCnt = $pdo->prepare("SELECT COUNT(*) FROM mail_accounts WHERE is_active = 1 AND id <> ?");
+                $stCnt->execute([$accountId]);
+                $activeOthers = (int)$stCnt->fetchColumn();
+                if ($activeOthers >= 2) {
+                    throw new RuntimeException('Solo se permiten 2 cuentas activas. Desactiva una antes de activar esta.');
+                }
+            }
+
+            $pdo->prepare("
+                UPDATE mail_accounts
+                SET email=?, provider=?, imap_host=?, imap_port=?, imap_secure=?, imap_user=?, imap_pass=?, imap_mailbox=?, imap_only_unseen=?, smtp_host=?, smtp_port=?, smtp_secure=?, smtp_user=?, smtp_pass=?, is_active=?
+                WHERE id=?
+            ")->execute([
+                $email,
+                $provider !== '' ? mb_substr($provider, 0, 80) : null,
+                mb_substr($imapHost, 0, 190),
+                $imapPort > 0 ? $imapPort : 993,
+                $imapSecure,
+                mb_substr($imapUser, 0, 190),
+                $imapPass !== '' ? mb_substr($imapPass, 0, 255) : (string)$curr['imap_pass'],
+                $imapMailbox !== '' ? mb_substr($imapMailbox, 0, 120) : 'INBOX',
+                $imapOnlyUnseen,
+                $smtpHost !== '' ? mb_substr($smtpHost, 0, 190) : null,
+                $smtpPort > 0 ? $smtpPort : null,
+                $smtpSecure !== '' ? mb_substr($smtpSecure, 0, 20) : null,
+                $smtpUser !== '' ? mb_substr($smtpUser, 0, 190) : null,
+                $smtpPass !== '' ? mb_substr($smtpPass, 0, 255) : (string)($curr['smtp_pass'] ?? ''),
+                $isActive,
+                $accountId,
+            ]);
+            $msg = 'Cuenta actualizada correctamente.';
+        } elseif ($action === 'toggle_mail_account') {
+            $accountId = (int)($_POST['account_id'] ?? 0);
+            $target = (int)($_POST['target_active'] ?? 0) === 1 ? 1 : 0;
+            if ($accountId <= 0) {
+                throw new RuntimeException('Cuenta de correo invalida.');
+            }
+            if ($target === 1) {
+                $activeCount = (int)$pdo->query("SELECT COUNT(*) FROM mail_accounts WHERE is_active = 1")->fetchColumn();
+                $stAct = $pdo->prepare("SELECT is_active FROM mail_accounts WHERE id = ? LIMIT 1");
+                $stAct->execute([$accountId]);
+                $curr = (int)($stAct->fetchColumn() ?? 0);
+                if ($curr !== 1 && $activeCount >= 2) {
+                    throw new RuntimeException('Ya hay 2 cuentas activas. Desactiva una para activar otra.');
+                }
+            }
+            $pdo->prepare("UPDATE mail_accounts SET is_active = ? WHERE id = ?")->execute([$target, $accountId]);
+            $msg = $target === 1 ? 'Cuenta activada.' : 'Cuenta desactivada.';
+        } elseif ($action === 'delete_mail_account') {
+            $accountId = (int)($_POST['account_id'] ?? 0);
+            if ($accountId <= 0) {
+                throw new RuntimeException('Cuenta de correo invalida.');
+            }
+            $pdo->prepare("DELETE FROM mail_accounts WHERE id = ?")->execute([$accountId]);
+            $msg = 'Cuenta eliminada.';
         } elseif ($action === 'update_review') {
             $id = (int)($_POST['id'] ?? 0);
             $status = trim((string)($_POST['review_status'] ?? 'pendiente'));
@@ -118,6 +319,13 @@ $metrics['today'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_messages 
 $metrics['unseen'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_messages WHERE is_unseen = 1")->fetchColumn();
 $metrics['pending'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_messages WHERE review_status = 'pendiente'")->fetchColumn();
 $metrics['candidates'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_messages WHERE review_status = 'candidato_pedido'")->fetchColumn();
+$mailAccounts = $pdo->query("SELECT * FROM mail_accounts ORDER BY id DESC")->fetchAll();
+$activeMailAccounts = 0;
+foreach ($mailAccounts as $ma) {
+    if ((int)($ma['is_active'] ?? 0) === 1) {
+        $activeMailAccounts++;
+    }
+}
 
 $st = $pdo->prepare("SELECT * FROM email_inbox_messages $sqlWhere ORDER BY COALESCE(received_at, fetched_at) DESC LIMIT 200");
 $st->execute($params);
@@ -266,12 +474,72 @@ function statusBadge(string $status): string {
         .check-inline input[type="checkbox"] { accent-color:#06b6d4; }
         .phase-note { color:#64748b; font-size:12px; }
         .alert-nexus { margin-bottom:16px; }
+        .mail-config-chip {
+            display:inline-flex; align-items:center; gap:8px;
+            min-height:42px; padding:0 14px; border-radius:9px;
+            border:1px solid rgba(14,165,233,.42); background:rgba(14,165,233,.08);
+            color:#e2f3ff; font-weight:700; font-size:13px;
+        }
+        .mail-config-chip strong { color:#38bdf8; font-family:var(--font-mono); }
+        .mail-modal-backdrop {
+            position:fixed; inset:0; background:rgba(2,8,23,.74);
+            backdrop-filter:blur(3px); z-index:2000; display:none;
+        }
+        .mail-modal-backdrop.show { display:block; }
+        .mail-modal {
+            position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+            width:min(1100px, calc(100vw - 28px)); max-height:86vh; overflow:auto;
+            border-radius:12px; border:1px solid #1e293b; background:#0b1222;
+            box-shadow:0 30px 80px rgba(0,0,0,.55); z-index:2001; display:none;
+        }
+        .mail-modal.show { display:block; }
+        .mail-modal-header {
+            padding:14px 16px; border-bottom:1px solid #1e293b; display:flex;
+            align-items:center; justify-content:space-between; gap:12px;
+        }
+        .mail-modal-title { margin:0; font-size:15px; font-weight:800; }
+        .mail-modal-body { padding:14px 16px 16px; }
+        .mail-modal-close {
+            width:34px; height:34px; border-radius:8px; border:1px solid #334155;
+            background:#1e293b; color:#e2e8f0; display:inline-flex; align-items:center; justify-content:center;
+        }
+        .mail-modal-close:hover { background:#334155; }
+        .mail-accounts-panel { background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px; }
+        .mail-modal-stack { display:grid; gap:12px; }
+        .mail-section-title { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+        .mail-section-title h3 { margin:0; font-size:14px; font-weight:800; }
+        .mail-section-title span { color:#64748b; font-size:12px; }
+        .mail-edit-panel { display:none; border-color:rgba(14,165,233,.42); background:#0b1730; }
+        .mail-edit-panel.show { display:block; }
+        .mail-add-panel { display:none; }
+        .mail-add-panel.show { display:block; }
+        .mail-accounts-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+        .mail-accounts-head h3 { margin:0; font-size:14px; font-weight:800; }
+        .mail-accounts-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:10px; }
+        .mail-accounts-grid .wide { grid-column:span 2; }
+        .mail-accounts-grid .full { grid-column:span 4; }
+        .mail-accounts-list { border:1px solid #1e293b; border-radius:8px; overflow:hidden; }
+        .mail-account-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid #1e293b; }
+        .mail-account-row:last-child { border-bottom:none; }
+        .mail-account-info { font-size:12px; color:#bcd3ee; min-width:0; flex:1; }
+        .mail-account-info strong { display:block; color:#f8fafc; margin-bottom:4px; }
+        .mail-account-actions { display:flex; gap:8px; align-items:center; }
+        .mini-btn { min-height:32px; border-radius:8px; padding:0 10px; font-size:12px; font-weight:700; }
+        .mini-btn.on { background:#0ea5e9; color:#fff; border:0; }
+        .mini-btn.off { background:#334155; color:#e2e8f0; border:0; }
+        .mini-btn.del { background:#7f1d1d; color:#fecaca; border:0; }
+        .mini-btn.edit { background:#0f3d5c; color:#bae6fd; border:0; }
         @media (max-width: 980px) {
             .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .content-grid.mail-grid { grid-template-columns:1fr; }
             .mail-toolbar { grid-template-columns:1fr; }
             .mail-page-header { align-items:flex-start; flex-direction:column; }
             .mail-list { max-height:45vh; }
+            .mail-accounts-grid { grid-template-columns:1fr; }
+            .mail-accounts-grid .wide,
+            .mail-accounts-grid .full { grid-column:span 1; }
+            .mail-account-row { flex-direction:column; align-items:flex-start; }
+            .mail-config-chip { width:100%; justify-content:center; }
         }
     </style>
 </head>
@@ -338,6 +606,11 @@ function statusBadge(string $status): string {
             <form method="post" class="mail-actions">
                 <input type="hidden" name="action" value="sync_imap">
                 <button class="btn-ok" type="submit"><i class="fa-solid fa-rotate"></i> Sincronizar IMAP</button>
+                <button class="mail-config-chip" type="button" id="openMailAccountsModal">
+                    <i class="fa-solid fa-envelope-circle-check"></i>
+                    Cuentas
+                    <strong><?= $activeMailAccounts ?>/2</strong>
+                </button>
             </form>
         </div>
 
@@ -449,5 +722,264 @@ function statusBadge(string $status): string {
         </section>
     </div>
 </main>
+<div class="mail-modal-backdrop" id="mailAccountsBackdrop"></div>
+<section class="mail-modal" id="mailAccountsModal" aria-hidden="true">
+    <div class="mail-modal-header">
+        <h3 class="mail-modal-title">Cuentas de correo vinculadas (activas: <?= $activeMailAccounts ?>/2)</h3>
+        <button class="mail-modal-close" type="button" id="closeMailAccountsModal"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="mail-modal-body">
+        <section class="mail-accounts-panel">
+            <div class="mail-accounts-head">
+                <h3>Configuracion IMAP/SMTP</h3>
+            </div>
+            <div class="mail-section-title">
+                <h3>Cuentas configuradas</h3>
+                <button class="btn-main" id="showAddMailPanel" type="button"><i class="fa-solid fa-plus"></i> Agregar otra cuenta</button>
+            </div>
+            <div class="mail-accounts-list" style="margin-bottom:12px;">
+                <?php if (empty($mailAccounts)): ?>
+                    <div class="mail-account-row"><div class="mail-account-info">No hay cuentas guardadas. Agrega la primera cuenta.</div></div>
+                <?php else: ?>
+                    <?php foreach ($mailAccounts as $acc): ?>
+                        <div class="mail-account-row">
+                            <div class="mail-account-info">
+                                <strong><?= htmlspecialchars((string)$acc['email']) ?></strong>
+                                IMAP <?= htmlspecialchars((string)$acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?>
+                                · <?= (int)$acc['is_active'] === 1 ? 'Activa' : 'Inactiva' ?>
+                            </div>
+                            <div class="mail-account-actions">
+                                <form method="post">
+                                    <input type="hidden" name="action" value="toggle_mail_account">
+                                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                                    <input type="hidden" name="target_active" value="<?= (int)$acc['is_active'] === 1 ? 0 : 1 ?>">
+                                    <button class="mini-btn <?= (int)$acc['is_active'] === 1 ? 'off' : 'on' ?>" type="submit">
+                                        <?= (int)$acc['is_active'] === 1 ? 'Desactivar' : 'Activar' ?>
+                                    </button>
+                                </form>
+                                <button
+                                    class="mini-btn edit js-edit-mail-account"
+                                    type="button"
+                                    data-id="<?= (int)$acc['id'] ?>"
+                                    data-email="<?= htmlspecialchars((string)$acc['email'], ENT_QUOTES) ?>"
+                                    data-provider="<?= htmlspecialchars((string)($acc['provider'] ?? ''), ENT_QUOTES) ?>"
+                                    data-imap-host="<?= htmlspecialchars((string)$acc['imap_host'], ENT_QUOTES) ?>"
+                                    data-imap-port="<?= (int)$acc['imap_port'] ?>"
+                                    data-imap-user="<?= htmlspecialchars((string)$acc['imap_user'], ENT_QUOTES) ?>"
+                                    data-imap-mailbox="<?= htmlspecialchars((string)($acc['imap_mailbox'] ?? 'INBOX'), ENT_QUOTES) ?>"
+                                    data-imap-secure="<?= (int)$acc['imap_secure'] ?>"
+                                    data-imap-only-unseen="<?= (int)$acc['imap_only_unseen'] ?>"
+                                    data-smtp-host="<?= htmlspecialchars((string)($acc['smtp_host'] ?? ''), ENT_QUOTES) ?>"
+                                    data-smtp-port="<?= (int)($acc['smtp_port'] ?? 465) ?>"
+                                    data-smtp-user="<?= htmlspecialchars((string)($acc['smtp_user'] ?? ''), ENT_QUOTES) ?>"
+                                    data-is-active="<?= (int)$acc['is_active'] ?>"
+                                >Editar</button>
+                                <form method="post" onsubmit="return confirm('Eliminar esta cuenta de correo?');">
+                                    <input type="hidden" name="action" value="delete_mail_account">
+                                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                                    <button class="mini-btn del" type="submit">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+            <section class="mail-accounts-panel mail-edit-panel" id="mailEditPanel" style="margin-bottom:12px;">
+                <div class="mail-section-title">
+                    <h3 id="mailEditTitle">Editar cuenta</h3>
+                    <button class="btn-glow" id="mailCancelEditBtn" type="button">Cerrar edicion</button>
+                </div>
+                <form method="post">
+                    <input type="hidden" name="action" value="update_mail_account">
+                    <input type="hidden" name="account_id" id="editMailAccountId" value="0">
+                    <div class="mail-accounts-grid">
+                        <input class="form-control search-input" id="editMailEmail" name="email" type="email" placeholder="correo@dominio.com" required>
+                        <input class="form-control search-input" id="editMailProvider" name="provider" placeholder="Proveedor (ej. Gmail)">
+                        <input class="form-control search-input" id="editMailImapHost" name="imap_host" placeholder="IMAP Host" required>
+                        <input class="form-control search-input" id="editMailImapPort" name="imap_port" type="number" value="993" min="1" required>
+                        <input class="form-control search-input" id="editMailImapUser" name="imap_user" placeholder="IMAP User" required>
+                        <input class="form-control search-input wide" id="editMailImapMailbox" name="imap_mailbox" placeholder="IMAP Mailbox (INBOX)" value="INBOX">
+                        <input class="form-control search-input full" id="editMailImapPass" name="imap_pass" placeholder="IMAP Password (dejar vacio para conservar)">
+                        <input class="form-control search-input" id="editMailSmtpHost" name="smtp_host" placeholder="SMTP Host">
+                        <input class="form-control search-input" id="editMailSmtpPort" name="smtp_port" type="number" value="465" min="1">
+                        <input class="form-control search-input" id="editMailSmtpUser" name="smtp_user" placeholder="SMTP User">
+                        <input class="form-control search-input full" id="editMailSmtpPass" name="smtp_pass" placeholder="SMTP Password (opcional, vacio conserva)">
+                    </div>
+                    <div class="mail-actions">
+                        <label class="check-inline"><input type="checkbox" id="editMailImapSecure" name="imap_secure" value="1"> IMAP SSL</label>
+                        <label class="check-inline"><input type="checkbox" id="editMailOnlyUnseen" name="imap_only_unseen" value="1"> Solo no leidos</label>
+                        <label class="check-inline"><input type="checkbox" id="editMailIsActive" name="is_active" value="1"> Activa</label>
+                        <button class="btn-main" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button>
+                    </div>
+                </form>
+            </section>
+            <div class="mail-section-title mail-add-panel" id="mailAddHeader">
+                <h3>Agregar nueva cuenta</h3>
+                <button class="btn-glow" id="hideAddMailPanel" type="button">Cancelar alta</button>
+            </div>
+            <form method="post" class="mail-add-panel" id="mailAddPanel">
+                <input type="hidden" name="action" id="mailFormAction" value="add_mail_account">
+                <input type="hidden" name="account_id" id="mailAccountId" value="0">
+                <div class="mail-accounts-grid">
+                    <input class="form-control search-input" id="mailEmail" name="email" type="email" placeholder="correo@dominio.com" required>
+                    <input class="form-control search-input" id="mailProvider" name="provider" placeholder="Proveedor (ej. Gmail)">
+                    <input class="form-control search-input" id="mailImapHost" name="imap_host" placeholder="IMAP Host" required>
+                    <input class="form-control search-input" id="mailImapPort" name="imap_port" type="number" value="993" min="1" required>
+                    <input class="form-control search-input" id="mailImapUser" name="imap_user" placeholder="IMAP User" required>
+                    <input class="form-control search-input wide" id="mailImapMailbox" name="imap_mailbox" placeholder="IMAP Mailbox (INBOX)" value="INBOX">
+                    <input class="form-control search-input full" id="mailImapPass" name="imap_pass" placeholder="IMAP Password" required>
+                    <input class="form-control search-input" id="mailSmtpHost" name="smtp_host" placeholder="SMTP Host">
+                    <input class="form-control search-input" id="mailSmtpPort" name="smtp_port" type="number" value="465" min="1">
+                    <input class="form-control search-input" id="mailSmtpUser" name="smtp_user" placeholder="SMTP User">
+                    <input class="form-control search-input full" id="mailSmtpPass" name="smtp_pass" placeholder="SMTP Password">
+                </div>
+                <div class="mail-actions">
+                    <label class="check-inline"><input type="checkbox" id="mailImapSecure" name="imap_secure" value="1" checked> IMAP SSL</label>
+                    <label class="check-inline"><input type="checkbox" id="mailOnlyUnseen" name="imap_only_unseen" value="1" checked> Solo no leidos</label>
+                    <label class="check-inline"><input type="checkbox" id="mailIsActive" name="is_active" value="1" checked> Activa</label>
+                    <button class="btn-main" id="mailSubmitBtn" type="submit"><i class="fa-solid fa-plus"></i> Agregar cuenta</button>
+                    <button class="btn-glow" id="mailCancelEditBtn" type="button" style="display:none;">Cancelar edicion</button>
+                </div>
+            </form>
+            <div class="mail-accounts-list mt-2" style="display:none;">
+                <?php if (empty($mailAccounts)): ?>
+                    <div class="mail-account-row"><div class="mail-account-info">No hay cuentas guardadas. Usa el formulario para vincular la primera.</div></div>
+                <?php else: ?>
+                    <?php foreach ($mailAccounts as $acc): ?>
+                        <div class="mail-account-row">
+                            <div class="mail-account-info">
+                                <strong><?= htmlspecialchars((string)$acc['email']) ?></strong>
+                                · IMAP <?= htmlspecialchars((string)$acc['imap_host']) ?>:<?= (int)$acc['imap_port'] ?>
+                                · <?= (int)$acc['is_active'] === 1 ? 'Activa' : 'Inactiva' ?>
+                            </div>
+                            <div class="mail-account-actions">
+                                <form method="post">
+                                    <input type="hidden" name="action" value="toggle_mail_account">
+                                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                                    <input type="hidden" name="target_active" value="<?= (int)$acc['is_active'] === 1 ? 0 : 1 ?>">
+                                    <button class="mini-btn <?= (int)$acc['is_active'] === 1 ? 'off' : 'on' ?>" type="submit">
+                                        <?= (int)$acc['is_active'] === 1 ? 'Desactivar' : 'Activar' ?>
+                                    </button>
+                                </form>
+                                <button
+                                    class="mini-btn edit js-edit-mail-account"
+                                    type="button"
+                                    data-id="<?= (int)$acc['id'] ?>"
+                                    data-email="<?= htmlspecialchars((string)$acc['email'], ENT_QUOTES) ?>"
+                                    data-provider="<?= htmlspecialchars((string)($acc['provider'] ?? ''), ENT_QUOTES) ?>"
+                                    data-imap-host="<?= htmlspecialchars((string)$acc['imap_host'], ENT_QUOTES) ?>"
+                                    data-imap-port="<?= (int)$acc['imap_port'] ?>"
+                                    data-imap-user="<?= htmlspecialchars((string)$acc['imap_user'], ENT_QUOTES) ?>"
+                                    data-imap-mailbox="<?= htmlspecialchars((string)($acc['imap_mailbox'] ?? 'INBOX'), ENT_QUOTES) ?>"
+                                    data-imap-secure="<?= (int)$acc['imap_secure'] ?>"
+                                    data-imap-only-unseen="<?= (int)$acc['imap_only_unseen'] ?>"
+                                    data-smtp-host="<?= htmlspecialchars((string)($acc['smtp_host'] ?? ''), ENT_QUOTES) ?>"
+                                    data-smtp-port="<?= (int)($acc['smtp_port'] ?? 465) ?>"
+                                    data-smtp-user="<?= htmlspecialchars((string)($acc['smtp_user'] ?? ''), ENT_QUOTES) ?>"
+                                    data-is-active="<?= (int)$acc['is_active'] ?>"
+                                >Editar</button>
+                                <form method="post" onsubmit="return confirm('Eliminar esta cuenta de correo?');">
+                                    <input type="hidden" name="action" value="delete_mail_account">
+                                    <input type="hidden" name="account_id" value="<?= (int)$acc['id'] ?>">
+                                    <button class="mini-btn del" type="submit">Eliminar</button>
+                                </form>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </div>
+        </section>
+    </div>
+</section>
+<script>
+(() => {
+    const openBtn = document.getElementById('openMailAccountsModal');
+    const closeBtn = document.getElementById('closeMailAccountsModal');
+    const modal = document.getElementById('mailAccountsModal');
+    const backdrop = document.getElementById('mailAccountsBackdrop');
+    const showAddBtn = document.getElementById('showAddMailPanel');
+    const hideAddBtn = document.getElementById('hideAddMailPanel');
+    const addPanel = document.getElementById('mailAddPanel');
+    const addHeader = document.getElementById('mailAddHeader');
+    const editPanel = document.getElementById('mailEditPanel');
+    const editTitle = document.getElementById('mailEditTitle');
+    const cancelEditBtn = document.getElementById('mailCancelEditBtn');
+    const editAccountId = document.getElementById('editMailAccountId');
+    const editMailEmail = document.getElementById('editMailEmail');
+    const editMailProvider = document.getElementById('editMailProvider');
+    const editMailImapHost = document.getElementById('editMailImapHost');
+    const editMailImapPort = document.getElementById('editMailImapPort');
+    const editMailImapUser = document.getElementById('editMailImapUser');
+    const editMailImapMailbox = document.getElementById('editMailImapMailbox');
+    const editMailImapPass = document.getElementById('editMailImapPass');
+    const editMailSmtpHost = document.getElementById('editMailSmtpHost');
+    const editMailSmtpPort = document.getElementById('editMailSmtpPort');
+    const editMailSmtpUser = document.getElementById('editMailSmtpUser');
+    const editMailSmtpPass = document.getElementById('editMailSmtpPass');
+    const editMailImapSecure = document.getElementById('editMailImapSecure');
+    const editMailOnlyUnseen = document.getElementById('editMailOnlyUnseen');
+    const editMailIsActive = document.getElementById('editMailIsActive');
+    if (!openBtn || !closeBtn || !modal || !backdrop) return;
+
+    const openModal = () => {
+        modal.classList.add('show');
+        backdrop.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    };
+    const closeModal = () => {
+        modal.classList.remove('show');
+        backdrop.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    };
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    cancelEditBtn?.addEventListener('click', () => {
+        editPanel?.classList.remove('show');
+    });
+    showAddBtn?.addEventListener('click', () => {
+        editPanel?.classList.remove('show');
+        addPanel?.classList.add('show');
+        addHeader?.classList.add('show');
+        addPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    hideAddBtn?.addEventListener('click', () => {
+        addPanel?.classList.remove('show');
+        addHeader?.classList.remove('show');
+    });
+
+    document.querySelectorAll('.js-edit-mail-account').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            openModal();
+            addPanel?.classList.remove('show');
+            addHeader?.classList.remove('show');
+            editPanel?.classList.add('show');
+            if (editTitle) editTitle.textContent = `Editar cuenta: ${btn.getAttribute('data-email') || ''}`;
+            if (editAccountId) editAccountId.value = btn.getAttribute('data-id') || '0';
+            if (editMailEmail) editMailEmail.value = btn.getAttribute('data-email') || '';
+            if (editMailProvider) editMailProvider.value = btn.getAttribute('data-provider') || '';
+            if (editMailImapHost) editMailImapHost.value = btn.getAttribute('data-imap-host') || '';
+            if (editMailImapPort) editMailImapPort.value = btn.getAttribute('data-imap-port') || '993';
+            if (editMailImapUser) editMailImapUser.value = btn.getAttribute('data-imap-user') || '';
+            if (editMailImapMailbox) editMailImapMailbox.value = btn.getAttribute('data-imap-mailbox') || 'INBOX';
+            if (editMailImapPass) editMailImapPass.value = '';
+            if (editMailSmtpHost) editMailSmtpHost.value = btn.getAttribute('data-smtp-host') || '';
+            if (editMailSmtpPort) editMailSmtpPort.value = btn.getAttribute('data-smtp-port') || '465';
+            if (editMailSmtpUser) editMailSmtpUser.value = btn.getAttribute('data-smtp-user') || '';
+            if (editMailSmtpPass) editMailSmtpPass.value = '';
+            if (editMailImapSecure) editMailImapSecure.checked = (btn.getAttribute('data-imap-secure') || '1') === '1';
+            if (editMailOnlyUnseen) editMailOnlyUnseen.checked = (btn.getAttribute('data-imap-only-unseen') || '1') === '1';
+            if (editMailIsActive) editMailIsActive.checked = (btn.getAttribute('data-is-active') || '1') === '1';
+            editPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+})();
+</script>
 </body>
 </html>

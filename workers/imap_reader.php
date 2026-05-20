@@ -8,6 +8,56 @@ function mailConfigReady(): bool
     return MAIL_IMAP_HOST !== '' && MAIL_IMAP_USER !== '' && MAIL_IMAP_PASS !== '';
 }
 
+function getActiveMailAccounts(PDO $pdo): array
+{
+    if (!function_exists('tableExists') || !tableExists($pdo, 'mail_accounts')) {
+        return [];
+    }
+    $st = $pdo->query("
+        SELECT *
+        FROM mail_accounts
+        WHERE is_active = 1
+        ORDER BY id ASC
+        LIMIT 2
+    ");
+    return $st ? ($st->fetchAll() ?: []) : [];
+}
+
+function bootstrapEnvMailAccount(PDO $pdo): void
+{
+    if (!function_exists('tableExists') || !tableExists($pdo, 'mail_accounts')) {
+        return;
+    }
+    if (!mailConfigReady()) {
+        return;
+    }
+    $count = (int)$pdo->query("SELECT COUNT(*) FROM mail_accounts")->fetchColumn();
+    if ($count > 0) {
+        return;
+    }
+    $ins = $pdo->prepare("
+        INSERT INTO mail_accounts
+        (email, provider, imap_host, imap_port, imap_secure, imap_user, imap_pass, imap_mailbox, imap_only_unseen, smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, is_active, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)
+    ");
+    $ins->execute([
+        MAIL_IMAP_USER,
+        'ENV Bootstrap',
+        MAIL_IMAP_HOST,
+        (int)MAIL_IMAP_PORT,
+        MAIL_IMAP_SECURE ? 1 : 0,
+        MAIL_IMAP_USER,
+        MAIL_IMAP_PASS,
+        MAIL_IMAP_MAILBOX,
+        MAIL_IMAP_ONLY_UNSEEN ? 1 : 0,
+        MAIL_SMTP_HOST !== '' ? MAIL_SMTP_HOST : null,
+        (int)MAIL_SMTP_PORT > 0 ? (int)MAIL_SMTP_PORT : null,
+        MAIL_SMTP_SECURE !== '' ? MAIL_SMTP_SECURE : null,
+        MAIL_SMTP_USER !== '' ? MAIL_SMTP_USER : null,
+        MAIL_SMTP_PASS !== '' ? MAIL_SMTP_PASS : null,
+    ]);
+}
+
 function decodeMimeHeader(?string $value): string
 {
     $value = (string)$value;
@@ -92,21 +142,30 @@ function fetchBodyText($imap, int $msgNo): array
     return [$bodyText, $bodyHtml];
 }
 
-function readInboxMessages(PDO $pdo, int $limit = 25): array
+function readInboxMessagesFromAccount(PDO $pdo, array $account, int $limit = 25): array
 {
     if (!function_exists('imap_open')) {
         throw new RuntimeException('La extension IMAP de PHP no esta habilitada en XAMPP.');
     }
-    if (!mailConfigReady()) {
-        throw new RuntimeException('Faltan credenciales IMAP en includes/config.php.');
+
+    $host = (string)($account['imap_host'] ?? '');
+    $port = (int)($account['imap_port'] ?? 993);
+    $secure = (int)($account['imap_secure'] ?? 1) === 1;
+    $user = (string)($account['imap_user'] ?? '');
+    $pass = (string)($account['imap_pass'] ?? '');
+    $mailboxName = (string)($account['imap_mailbox'] ?? 'INBOX');
+    $onlyUnseen = (int)($account['imap_only_unseen'] ?? 1) === 1;
+
+    if ($host === '' || $user === '' || $pass === '') {
+        throw new RuntimeException('Cuenta de correo incompleta para IMAP.');
     }
 
     $mailbox = sprintf(
         '{%s:%d/imap/%s}%s',
-        MAIL_IMAP_HOST,
-        MAIL_IMAP_PORT,
-        MAIL_IMAP_SECURE ? 'ssl' : 'notls',
-        MAIL_IMAP_MAILBOX
+        $host,
+        $port,
+        $secure ? 'ssl' : 'notls',
+        $mailboxName
     );
 
     $imap = @imap_open($mailbox, MAIL_IMAP_USER, MAIL_IMAP_PASS, 0, 1);
@@ -115,7 +174,7 @@ function readInboxMessages(PDO $pdo, int $limit = 25): array
         throw new RuntimeException('No se pudo abrir IMAP: ' . $err);
     }
 
-    $criteria = MAIL_IMAP_ONLY_UNSEEN ? 'UNSEEN' : 'ALL';
+    $criteria = $onlyUnseen ? 'UNSEEN' : 'ALL';
     $uids = @imap_search($imap, $criteria, SE_UID);
     if ($uids === false || empty($uids)) {
         $msgNos = @imap_search($imap, $criteria);
@@ -193,7 +252,7 @@ function readInboxMessages(PDO $pdo, int $limit = 25): array
             ':body_html' => $bodyHtml !== '' ? $bodyHtml : null,
             ':received_at' => $receivedAt,
             ':is_unseen' => $isUnseen,
-            ':source_mailbox' => MAIL_IMAP_MAILBOX,
+            ':source_mailbox' => (($account['email'] ?? $user) . ':' . $mailboxName),
             ':raw_headers' => $headers !== '' ? $headers : null,
         ]);
 
@@ -212,5 +271,29 @@ function readInboxMessages(PDO $pdo, int $limit = 25): array
     }
 
     imap_close($imap);
+    return ['saved' => $saved, 'skipped' => $skipped, 'items' => $items];
+}
+
+function readInboxMessages(PDO $pdo, int $limit = 25): array
+{
+    bootstrapEnvMailAccount($pdo);
+    $accounts = getActiveMailAccounts($pdo);
+    if (empty($accounts)) {
+        throw new RuntimeException('No hay cuentas activas en mail_accounts. Configura al menos una cuenta desde el modulo de correos.');
+    }
+
+    $saved = 0;
+    $skipped = 0;
+    $items = [];
+
+    foreach ($accounts as $account) {
+        $result = readInboxMessagesFromAccount($pdo, $account, $limit);
+        $saved += (int)($result['saved'] ?? 0);
+        $skipped += (int)($result['skipped'] ?? 0);
+        foreach (($result['items'] ?? []) as $it) {
+            $items[] = $it;
+        }
+    }
+
     return ['saved' => $saved, 'skipped' => $skipped, 'items' => $items];
 }
