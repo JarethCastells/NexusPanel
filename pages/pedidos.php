@@ -566,6 +566,7 @@ function statusBadge(string $status): string {
         <a href="pedidos.php" class="nav-item active"><i class="fa-solid fa-envelope-open-text"></i><span>Correos Pedidos</span><div class="nav-indicator"></div></a>
         <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logistica Inteligente</span></a>
         <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
+        <a href="../whatsapp.php" class="nav-item"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a>
         <div class="nav-section-label">Operaciones</div>
         <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
         <div class="nav-section-label">Cuenta</div>
