@@ -168,8 +168,42 @@ function conversationSummary(array $messages): array {
     return array_values($byChat);
 }
 
+function normalizeSessionsPayload($payload): array {
+    if (!is_array($payload)) {
+        return [];
+    }
+    if (isset($payload['sessions']) && is_array($payload['sessions'])) {
+        return $payload['sessions'];
+    }
+    if (array_is_list($payload)) {
+        return $payload;
+    }
+    return [];
+}
+
 if (isset($_GET['action'])) {
     $action = (string)$_GET['action'];
+
+    if ($action === 'status') {
+        $res = openwaRequest('GET', '/sessions');
+        $sessions = $res['ok'] ? normalizeSessionsPayload($res['data'] ?? []) : [];
+        $ready = 0;
+        foreach ($sessions as $session) {
+            $state = strtolower((string)($session['status'] ?? ''));
+            if (in_array($state, ['ready', 'connected'], true)) {
+                $ready++;
+            }
+        }
+        respondJson([
+            'ok' => $res['ok'],
+            'reachable' => $res['status'] >= 200 && $res['status'] < 500,
+            'base_url' => openwaBaseUrl(),
+            'sessions' => count($sessions),
+            'ready' => $ready,
+            'status' => $res['status'],
+            'error' => $res['error'] ?? null,
+        ], $res['ok'] ? 200 : 200);
+    }
 
     if ($action === 'sessions') {
         $res = openwaRequest('GET', '/sessions');
@@ -639,8 +673,38 @@ async function loadSessions() {
             renderChat();
         }
     } catch (err) {
-        $('sessionList').innerHTML = `<div class="wa-empty" style="color:#fca5a5;">${esc(err.message)}</div>`;
-        $('chatSubtitle').textContent = 'Revisa que OpenWA este corriendo en el puerto 2785.';
+        const baseUrl = $('apiHint')?.textContent || 'http://localhost:2785';
+        sessions = [];
+        selectedSession = null;
+        selectedChat = '';
+        latestMessages = [];
+        convos = [];
+        $('statSessions').textContent = '0';
+        $('statReady').textContent = '0';
+        $('statConvos').textContent = '0';
+        $('statMessages').textContent = '0';
+        $('sessionStatus').textContent = 'sin conexion';
+        $('sessionStatus').className = 'wa-status';
+        $('sessionList').innerHTML = `
+            <div class="wa-empty" style="color:#fcd34d;line-height:1.55;">
+                OpenWA no esta activo.<br>
+                El panel esta listo, pero falta levantar el servicio en ${esc(baseUrl)}.
+            </div>`;
+        $('conversationList').innerHTML = '<div class="wa-empty">Primero levanta OpenWA y crea o inicia una sesion.</div>';
+        $('chatTitle').textContent = 'WhatsApp pendiente de conexion';
+        $('chatSubtitle').textContent = 'El conector PHP funciona; falta que el backend OpenWA este corriendo.';
+        $('chatBody').innerHTML = `
+            <div class="wa-empty" style="max-width:560px;margin:0 auto;line-height:1.7;color:#cbd5e1;">
+                <strong style="color:#f8fafc;">No se pudo conectar con OpenWA.</strong><br>
+                Necesitamos el backend OpenWA de tu companero o la URL donde este corriendo.
+                Cuando responda en <code style="color:#67e8f9;">${esc(baseUrl)}</code>, aqui apareceran las sesiones, QR, chats y mensajes.
+            </div>`;
+        $('createSessionBtn').disabled = true;
+        $('startSessionBtn').disabled = true;
+        $('stopSessionBtn').disabled = true;
+        $('logoutSessionBtn').disabled = true;
+        $('messageInput').disabled = true;
+        $('sendBtn').disabled = true;
     }
 }
 

@@ -168,7 +168,7 @@ function readInboxMessagesFromAccount(PDO $pdo, array $account, int $limit = 25)
         $mailboxName
     );
 
-    $imap = @imap_open($mailbox, MAIL_IMAP_USER, MAIL_IMAP_PASS, 0, 1);
+    $imap = @imap_open($mailbox, $user, $pass, 0, 1);
     if ($imap === false) {
         $err = imap_last_error() ?: 'Error desconocido';
         throw new RuntimeException('No se pudo abrir IMAP: ' . $err);

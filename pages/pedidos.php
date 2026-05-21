@@ -321,9 +321,17 @@ $metrics['pending'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_message
 $metrics['candidates'] = (int)$pdo->query("SELECT COUNT(*) FROM email_inbox_messages WHERE review_status = 'candidato_pedido'")->fetchColumn();
 $mailAccounts = $pdo->query("SELECT * FROM mail_accounts ORDER BY id DESC")->fetchAll();
 $activeMailAccounts = 0;
+$activeSmtpAccounts = 0;
 foreach ($mailAccounts as $ma) {
     if ((int)($ma['is_active'] ?? 0) === 1) {
         $activeMailAccounts++;
+        if (
+            trim((string)($ma['smtp_host'] ?? '')) !== ''
+            && trim((string)($ma['smtp_user'] ?? '')) !== ''
+            && trim((string)($ma['smtp_pass'] ?? '')) !== ''
+        ) {
+            $activeSmtpAccounts++;
+        }
     }
 }
 
@@ -481,6 +489,39 @@ function statusBadge(string $status): string {
             color:#e2f3ff; font-weight:700; font-size:13px;
         }
         .mail-config-chip strong { color:#38bdf8; font-family:var(--font-mono); }
+        .channel-overview {
+            display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
+            margin-bottom:16px;
+        }
+        .channel-card {
+            position:relative; overflow:hidden; min-height:118px;
+            border:1px solid #1e293b; border-radius:12px; padding:16px;
+            background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,18,35,.92));
+            display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+        }
+        .channel-card::after {
+            content:''; position:absolute; right:-42px; top:-42px; width:120px; height:120px;
+            border-radius:50%; background:rgba(14,165,233,.10); pointer-events:none;
+        }
+        .channel-card.whatsapp::after { background:rgba(34,197,94,.12); }
+        .channel-copy { position:relative; z-index:1; min-width:0; }
+        .channel-kicker { color:#8aa4c2; font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
+        .channel-title { margin:5px 0 6px; font-size:16px; font-weight:900; color:#f8fafc; }
+        .channel-meta { display:flex; gap:8px; flex-wrap:wrap; color:#9fb6d3; font-size:12px; }
+        .channel-pill {
+            display:inline-flex; align-items:center; gap:6px; padding:5px 9px;
+            border-radius:999px; background:rgba(30,41,59,.82);
+            border:1px solid rgba(148,163,184,.22); color:#cbd5e1; font-size:11px; font-weight:800;
+        }
+        .channel-pill.ok { color:#86efac; border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.12); }
+        .channel-pill.warn { color:#fcd34d; border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.12); }
+        .channel-actions { position:relative; z-index:1; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
+        .channel-action-link {
+            min-height:36px; border-radius:9px; padding:0 12px; display:inline-flex; align-items:center; gap:8px;
+            text-decoration:none; color:#dff7ff; border:1px solid rgba(14,165,233,.42); background:rgba(14,165,233,.08);
+            font-size:12px; font-weight:800; white-space:nowrap;
+        }
+        .channel-action-link:hover { color:#fff; background:rgba(14,165,233,.16); }
         .mail-modal-backdrop {
             position:fixed; inset:0; background:rgba(2,8,23,.74);
             backdrop-filter:blur(3px); z-index:2000; display:none;
@@ -530,6 +571,7 @@ function statusBadge(string $status): string {
         .mini-btn.del { background:#7f1d1d; color:#fecaca; border:0; }
         .mini-btn.edit { background:#0f3d5c; color:#bae6fd; border:0; }
         @media (max-width: 980px) {
+            .channel-overview { grid-template-columns:1fr; }
             .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .content-grid.mail-grid { grid-template-columns:1fr; }
             .mail-toolbar { grid-template-columns:1fr; }
@@ -614,6 +656,34 @@ function statusBadge(string $status): string {
                 </button>
             </form>
         </div>
+
+        <section class="channel-overview" aria-label="Canales vinculados">
+            <article class="channel-card">
+                <div class="channel-copy">
+                    <div class="channel-kicker">Correo operativo</div>
+                    <div class="channel-title">IMAP para lectura + SMTP para respuesta</div>
+                    <div class="channel-meta">
+                        <span class="channel-pill <?= $activeMailAccounts > 0 ? 'ok' : 'warn' ?>"><i class="fa-solid fa-inbox"></i> IMAP <?= $activeMailAccounts ?>/2</span>
+                        <span class="channel-pill <?= $activeSmtpAccounts > 0 ? 'ok' : 'warn' ?>"><i class="fa-solid fa-paper-plane"></i> SMTP <?= $activeSmtpAccounts ?>/<?= max(1, $activeMailAccounts) ?></span>
+                    </div>
+                </div>
+                <div class="channel-actions">
+                    <button class="channel-action-link" type="button" id="openMailAccountsModalFromCard"><i class="fa-solid fa-gear"></i> Configurar</button>
+                </div>
+            </article>
+            <article class="channel-card whatsapp">
+                <div class="channel-copy">
+                    <div class="channel-kicker">Canal alterno</div>
+                    <div class="channel-title">WhatsApp vinculado a OpenWA</div>
+                    <div class="channel-meta" id="whatsappChannelStatus">
+                        <span class="channel-pill warn"><i class="fa-solid fa-circle-notch fa-spin"></i> Revisando conexion</span>
+                    </div>
+                </div>
+                <div class="channel-actions">
+                    <a class="channel-action-link" href="../whatsapp.php"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp</a>
+                </div>
+            </article>
+        </section>
 
         <section class="metrics">
             <article class="metric"><div><h4><?= $metrics['today'] ?></h4><small>Correos hoy</small></div><div class="metric-icon"><i class="fa-solid fa-inbox"></i></div></article>
@@ -895,6 +965,7 @@ function statusBadge(string $status): string {
 <script>
 (() => {
     const openBtn = document.getElementById('openMailAccountsModal');
+    const openBtnFromCard = document.getElementById('openMailAccountsModalFromCard');
     const closeBtn = document.getElementById('closeMailAccountsModal');
     const modal = document.getElementById('mailAccountsModal');
     const backdrop = document.getElementById('mailAccountsBackdrop');
@@ -935,6 +1006,7 @@ function statusBadge(string $status): string {
         document.body.style.overflow = '';
     };
     openBtn.addEventListener('click', openModal);
+    openBtnFromCard?.addEventListener('click', openModal);
     closeBtn.addEventListener('click', closeModal);
     backdrop.addEventListener('click', closeModal);
     document.addEventListener('keydown', (e) => {
@@ -980,6 +1052,29 @@ function statusBadge(string $status): string {
             editPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     });
+})();
+
+(() => {
+    const statusWrap = document.getElementById('whatsappChannelStatus');
+    if (!statusWrap) return;
+    const pill = (text, icon, state = '') => `<span class="channel-pill ${state}"><i class="${icon}"></i> ${text}</span>`;
+    fetch('../whatsapp.php?action=status', { cache: 'no-store' })
+        .then((res) => res.json())
+        .then((data) => {
+            if (!data.ok) {
+                statusWrap.innerHTML = pill('OpenWA sin conexion', 'fa-solid fa-triangle-exclamation', 'warn');
+                return;
+            }
+            const ready = Number(data.ready || 0);
+            const sessions = Number(data.sessions || 0);
+            statusWrap.innerHTML = [
+                pill(`${sessions} sesiones`, 'fa-brands fa-whatsapp', sessions > 0 ? 'ok' : 'warn'),
+                pill(`${ready} conectadas`, 'fa-solid fa-signal', ready > 0 ? 'ok' : 'warn'),
+            ].join('');
+        })
+        .catch(() => {
+            statusWrap.innerHTML = pill('OpenWA no responde', 'fa-solid fa-plug-circle-xmark', 'warn');
+        });
 })();
 </script>
 </body>
