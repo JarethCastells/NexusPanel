@@ -78,3 +78,8 @@ define('MAIL_SMTP_PORT', (int)envv('MAIL_SMTP_PORT', 465));
 define('MAIL_SMTP_SECURE', (string)envv('MAIL_SMTP_SECURE', 'ssl'));
 define('MAIL_SMTP_USER', (string)envv('MAIL_SMTP_USER', 'demianromero@teotek.com.mx'));
 define('MAIL_SMTP_PASS', (string)envv('MAIL_SMTP_PASS', ''));
+
+// IA local para extraccion asistida de pedidos desde correos.
+// Primera etapa: solo prellenado inteligente revisado por administrador.
+define('OLLAMA_BASE_URL', rtrim((string)envv('OLLAMA_BASE_URL', 'http://localhost:11434'), '/'));
+define('OLLAMA_MODEL', (string)envv('OLLAMA_MODEL', 'llama3.2:3b'));
