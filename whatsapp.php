@@ -53,7 +53,7 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
             'header' => implode("\r\n", $headers),
             'content' => $body ?? '',
             'ignore_errors' => true,
-            'timeout' => 12,
+            'timeout' => 60,
         ],
     ]);
 
@@ -1455,44 +1455,43 @@ $('composeForm').addEventListener('submit', async (e) => {
     $('sendBtn').disabled = true;
     try {
         if (file) {
-            const reader = new FileReader();
-            reader.onload = async (event) => {
-                const base64Data = event.target.result;
-                const mimetype = file.type || 'application/octet-stream';
-                const filename = file.name || 'archivo';
-                
-                let endpoint = 'send-document';
-                if (mimetype.startsWith('image/')) endpoint = 'send-image';
-                else if (mimetype.startsWith('video/')) endpoint = 'send-video';
-                else if (mimetype.startsWith('audio/')) endpoint = 'send-audio';
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            
+            const mimetype = file.type || 'application/octet-stream';
+            const filename = file.name || 'archivo';
+            
+            let endpoint = 'send-document';
+            if (mimetype.startsWith('image/')) endpoint = 'send-image';
+            else if (mimetype.startsWith('video/')) endpoint = 'send-video';
+            else if (mimetype.startsWith('audio/')) endpoint = 'send-audio';
 
-                await api('send_media', { 
-                    method: 'POST', 
-                    body: { 
-                        session_id: selectedSession.id, 
-                        chat_id: selectedChat, 
-                        caption: text,
-                        mimetype: mimetype,
-                        filename: filename,
-                        data: base64Data,
-                        endpoint: endpoint
-                    } 
-                });
-                
-                $('messageInput').value = '';
-                clearMediaPreview();
-                await loadMessages(false);
-                $('sendBtn').disabled = false;
-            };
-            reader.readAsDataURL(file);
+            await api('send_media', { 
+                method: 'POST', 
+                body: { 
+                    session_id: selectedSession.id, 
+                    chat_id: selectedChat, 
+                    caption: text,
+                    mimetype: mimetype,
+                    filename: filename,
+                    data: base64Data,
+                    endpoint: endpoint
+                } 
+            });
+            clearMediaPreview();
         } else {
             await api('send_message', { method:'POST', body:{ session_id:selectedSession.id, chat_id:selectedChat, text } });
-            $('messageInput').value = '';
-            await loadMessages(false);
-            $('sendBtn').disabled = false;
         }
+        
+        $('messageInput').value = '';
+        await loadMessages(false);
     } catch (err) {
-        alert(err.message);
+        alert("Error enviando: " + err.message);
+    } finally {
         $('sendBtn').disabled = false;
     }
 });
