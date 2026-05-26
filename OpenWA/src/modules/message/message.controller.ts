@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Param, Body, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { MessageService } from './message.service';
 import { BulkMessageService } from './bulk-message.service';
 import { SendTextMessageDto, SendMediaMessageDto, MessageResponseDto } from './dto';
@@ -255,6 +256,20 @@ export class MessageController {
     @Param('messageId') messageId: string,
   ) {
     return this.messageService.getMessageReactions(sessionId, chatId, messageId);
+  }
+
+  @SkipThrottle()
+  @Get(':chatId/:messageId/media')
+  @ApiOperation({ summary: 'Download message media' })
+  @ApiParam({ name: 'sessionId', description: 'Session ID' })
+  @ApiParam({ name: 'chatId', description: 'Chat ID containing the message' })
+  @ApiParam({ name: 'messageId', description: 'Message ID to get media for' })
+  async getMedia(
+    @Param('sessionId') sessionId: string,
+    @Param('chatId') chatId: string,
+    @Param('messageId') messageId: string,
+  ) {
+    return this.messageService.getMessageMedia(sessionId, chatId, messageId);
   }
 
   // ========== Delete Message ==========

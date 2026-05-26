@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ChatService } from './chat.service';
 
 @ApiTags('chats')
@@ -7,6 +8,7 @@ import { ChatService } from './chat.service';
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
+  @SkipThrottle()
   @Get()
   @ApiOperation({ summary: 'Get recent chats for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
@@ -19,6 +21,7 @@ export class ChatController {
     return this.chatService.getChats(sessionId, limit ? parseInt(limit, 10) : 50);
   }
 
+  @SkipThrottle()
   @Get(':chatId/messages')
   @ApiOperation({ summary: 'Get chat messages for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })

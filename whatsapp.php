@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 
@@ -53,7 +53,7 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
             'header' => implode("\r\n", $headers),
             'content' => $body ?? '',
             'ignore_errors' => true,
-            'timeout' => 12,
+            'timeout' => 60,
         ],
     ]);
 
@@ -130,11 +130,26 @@ function normalizeMessages(array $payload): array {
             'status' => (string)($message['status'] ?? ''),
             'timestamp' => $message['timestamp'] ?? $message['createdAt'] ?? null,
             'createdAt' => $message['createdAt'] ?? null,
+            'caption' => (string)($message['caption'] ?? $message['body'] ?? ''),
+            'deprecatedMms3Url' => $message['deprecatedMms3Url'] ?? $message['clientUrl'] ?? null,
+            'mediaUrl' => $message['mediaUrl'] ?? $message['deprecatedMms3Url'] ?? $message['clientUrl'] ?? null,
+            'mimetype' => $message['mimetype'] ?? $message['media']['mimetype'] ?? null,
+            'mediaData' => $message['mediaData'] ?? null,
+            'filehash' => $message['filehash'] ?? null,
         ];
     }
 
     usort($rows, function ($a, $b) {
-        return strtotime((string)($b['createdAt'] ?? $b['timestamp'] ?? '')) <=> strtotime((string)($a['createdAt'] ?? $a['timestamp'] ?? ''));
+        $getTs = function($val) {
+            if (empty($val)) return 0;
+            if (is_numeric($val)) {
+                $num = (int)$val;
+                return $num > 20000000000 ? (int)($num / 1000) : $num;
+            }
+            $ts = @strtotime((string)$val);
+            return $ts === false ? 0 : $ts;
+        };
+        return $getTs($b['createdAt'] ?? $b['timestamp'] ?? 0) <=> $getTs($a['createdAt'] ?? $a['timestamp'] ?? 0);
     });
 
     return ['messages' => $rows, 'total' => (int)($payload['total'] ?? count($rows))];
@@ -220,6 +235,55 @@ if (isset($_GET['action'])) {
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
 
+    if ($action === 'get_media') {
+        $sessionId = trim((string)($_GET['session_id'] ?? ''));
+        $chatId = trim((string)($_GET['chat_id'] ?? ''));
+        $messageId = trim((string)($_GET['message_id'] ?? ''));
+        if ($sessionId === '' || $chatId === '' || $messageId === '') {
+            http_response_code(400); exit;
+        }
+        $res = openwaRequest('GET', '/sessions/' . rawurlencode($sessionId) . '/messages/' . rawurlencode($chatId) . '/' . rawurlencode($messageId) . '/media');
+        if ($res['ok'] && isset($res['data']['data'])) {
+            $base64 = $res['data']['data'];
+            $mime = $res['data']['mimetype'] ?? 'application/octet-stream';
+            header('Content-Type: ' . $mime);
+            header('Cache-Control: public, max-age=86400');
+            echo base64_decode($base64);
+        } else {
+            http_response_code(404);
+        }
+        exit;
+    }
+
+    if ($action === 'send_media' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $input = json_decode((string)file_get_contents('php://input'), true);
+        $sessionId = trim((string)($input['session_id'] ?? ''));
+        $chatId = trim((string)($input['chat_id'] ?? ''));
+        $caption = trim((string)($input['caption'] ?? ''));
+        $mimetype = trim((string)($input['mimetype'] ?? ''));
+        $filename = trim((string)($input['filename'] ?? ''));
+        $data = trim((string)($input['data'] ?? ''));
+        
+        if (strpos($data, ';base64,') !== false) {
+            $data = substr($data, strpos($data, ';base64,') + 8);
+        }
+
+        $endpoint = trim((string)($input['endpoint'] ?? 'send-document'));
+
+        if ($sessionId === '' || $chatId === '' || $data === '') {
+            respondJson(['ok' => false, 'error' => 'Faltan datos.'], 400);
+        }
+
+        $res = openwaRequest('POST', '/sessions/' . rawurlencode($sessionId) . '/messages/' . $endpoint, [
+            'chatId' => $chatId,
+            'caption' => $caption,
+            'mimetype' => $mimetype,
+            'filename' => $filename,
+            'base64' => $data,
+        ]);
+        respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
+    }
+
     if ($action === 'engine_chat_messages') {
         $sessionId = trim((string)($_GET['session_id'] ?? ''));
         $chatId = trim((string)($_GET['chat_id'] ?? ''));
@@ -228,6 +292,10 @@ if (isset($_GET['action'])) {
         }
         $query = ['limit' => min(200, max(1, (int)($_GET['limit'] ?? 50)))];
         $res = openwaRequest('GET', '/sessions/' . rawurlencode($sessionId) . '/chats/' . rawurlencode($chatId) . '/messages', null, $query);
+        if ($res['ok']) {
+            $normalized = normalizeMessages(is_array($res['data']) ? $res['data'] : []);
+            $res['data'] = $normalized['messages'];
+        }
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
 
@@ -263,6 +331,7 @@ if (isset($_GET['action'])) {
         ]);
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
+
 
     if ($action === 'create_session' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $input = json_decode((string)file_get_contents('php://input'), true);
@@ -369,8 +438,8 @@ if (isset($_GET['action'])) {
         .wa-chat { display:flex; flex-direction:column; min-height:0; border:1px solid rgba(255,255,255,0.08); background:rgba(10,20,35,0.55); backdrop-filter:blur(16px); border-radius:18px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
         .wa-chat-head { flex-shrink:0; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; gap:10px; background:rgba(0,0,0,0.1); }
         .wa-chat-body { flex:1; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:10px; padding:14px; min-height:0; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.15) transparent; }
-        .wa-compose { flex-shrink:0; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.06); display:grid; grid-template-columns:1fr auto; gap:10px; background:rgba(0,0,0,0.1); }
-        .wa-compose input { border-radius:999px; padding:9px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff; transition:all .2s; width:100%; }
+        .wa-compose { flex-shrink:0; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.1); }
+        .wa-compose input { border-radius:999px; padding:9px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff; transition:all .2s; flex:1; min-width:0; }
         .wa-compose input:focus { background:rgba(0,0,0,0.3); border-color:rgba(0,212,255,0.5); box-shadow:0 0 0 3px rgba(0,212,255,0.1); outline:none; }
         .wa-compose button { border-radius:999px; padding:9px 20px; font-weight:700; white-space:nowrap; }
 
@@ -421,6 +490,16 @@ if (isset($_GET['action'])) {
         .wa-search::placeholder { color:rgba(255,255,255,0.3); }
         .wa-btn-new { display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; font-size:12px; font-weight:600; border-radius:9px; cursor:pointer; background:rgba(0,212,255,0.1); border:1px solid rgba(0,212,255,0.25); color:#67e8f9; transition:all .2s; width:100%; }
         .wa-btn-new:hover { background:rgba(0,212,255,0.18); }
+
+        /* Media in bubbles */
+        .wa-image { max-width:280px; max-height:280px; width:auto; height:auto; object-fit:contain; border-radius:12px; margin:4px 0; display:block; cursor:pointer; transition:opacity .2s; }
+        .wa-image:hover { opacity:.9; }
+        .wa-caption { font-size:12.5px; color:rgba(255,255,255,0.8); margin-top:4px; word-break:break-word; }
+
+        /* Loader */
+        .wa-loader { height: 3px; width: 100%; background: rgba(0,212,255,0.1); position: relative; overflow: hidden; flex-shrink: 0; display: none; }
+        .wa-loader::after { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 40%; background: #00d4ff; animation: loadingBar 1s infinite ease-in-out; border-radius: 3px; }
+        @keyframes loadingBar { 0% { left: -40%; } 100% { left: 100%; } }
 
         @keyframes slideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -513,8 +592,9 @@ if (isset($_GET['action'])) {
                             <span class="wa-badge" id="statConvosBadge">0</span>
                         </div>
                         <button class="wa-btn-new" onclick="startNewChat()"><i class="fas fa-plus"></i> Nuevo Chat</button>
-                        <input id="chatSearch" class="wa-search" placeholder="ðŸ” Buscar..." oninput="filterChats(this.value)">
+                        <input id="chatSearch" class="wa-search" placeholder="🔍 Buscar..." oninput="filterChats(this.value)">
                     </div>
+                    <div id="chatListLoader" class="wa-loader"></div>
                     <div class="wa-convos-list" id="conversationList"><div class="wa-empty">Selecciona una sesiÃ³n.</div></div>
                 </div>
             </section>
@@ -532,14 +612,34 @@ if (isset($_GET['action'])) {
                         <span class="wa-status" id="sessionStatus">sin sesion</span>
                     </div>
                 </div>
+                <div id="chatBodyLoader" class="wa-loader"></div>
                 <div class="wa-chat-body" id="chatBody"><div class="wa-empty">Aun no hay mensajes cargados.</div></div>
+                
+                <!-- Media Preview Area -->
+                <div id="mediaPreview" style="display:none; padding:10px; background:rgba(255,255,255,0.05); border-top:1px solid rgba(255,255,255,0.1); align-items:center; gap:10px;">
+                    <div id="mediaPreviewImgContainer" style="width:50px; height:50px; border-radius:8px; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center;">
+                        <img id="mediaPreviewImg" src="" style="max-width:100%; max-height:100%; object-fit:cover; display:none;">
+                        <i id="mediaPreviewIcon" class="fa-solid fa-file" style="color:white; display:none; font-size:24px;"></i>
+                    </div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div id="mediaPreviewName" style="color:white; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                        <div id="mediaPreviewSize" style="color:#94a3b8; font-size:11px;"></div>
+                    </div>
+                    <button type="button" class="btn-danger-custom" onclick="clearMediaPreview()" style="padding:5px 10px; border-radius:50%;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <form class="wa-compose" id="composeForm">
-                    <input class="modal-input" id="messageInput" placeholder="Escribe un mensaje..." disabled style="border-radius:999px;">
+                    <label for="mediaInput" class="btn-secondary-custom" style="cursor:pointer; border-radius:999px; padding:9px 14px; margin-right:5px;" title="Adjuntar archivo">
+                        <i class="fa-solid fa-paperclip"></i>
+                    </label>
+                    <input type="file" id="mediaInput" style="display:none;" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx" disabled>
+                    <input class="modal-input" id="messageInput" placeholder="Escribe un mensaje..." disabled style="border-radius:999px; flex:1;">
                     <button class="btn-primary-custom" type="submit" id="sendBtn" disabled><i class="fa-solid fa-paper-plane"></i> Enviar</button>
                 </form>
             </section>
         </div>
     </div>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -552,10 +652,24 @@ let latestMessages = [];
 let convos = [];
 let pollTimer = null;
 let currentQr = '';
+let currentMediaFile = null;
 
-
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const getMs = (m) => {
+    const val = m.createdAt || m.timestamp;
+    if (!val) return 0;
+    if (typeof val === 'number') {
+        return val < 2e10 ? val * 1000 : val;
+    }
+    const parsed = Date.parse(val);
+    if (!isNaN(parsed)) return parsed;
+    const num = Number(val);
+    if (!isNaN(num) && num > 0) {
+        return num < 2e10 ? num * 1000 : num;
+    }
+    return 0;
+};
 
 
 async function api(action, options = {}) {
@@ -594,8 +708,15 @@ function labelForChat(chatId) {
 
 function fmtDate(value) {
     if (!value) return '';
-    const ts = typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : value;
-    const date = new Date(ts);
+    let ts = value;
+    if (typeof value === 'string') {
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) {
+            ts = num;
+        }
+    }
+    const finalTs = typeof ts === 'number' ? (ts < 2e10 ? ts * 1000 : ts) : ts;
+    const date = new Date(finalTs);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' });
 }
@@ -785,46 +906,176 @@ function renderConversations(items) {
         </button>
     `).join('');
     list.querySelectorAll('.wa-convo').forEach(btn => btn.addEventListener('click', async () => {
-        selectedChat = btn.dataset.chatId || '';
+        const chatId = btn.dataset.chatId || '';
+        if (selectedChat === chatId) return; // ignore clicking the already selected chat
+
+        selectedChat = chatId;
         lastMsgId = ''; // reset so detection works fresh for this chat
+        latestMessages = []; // clear old messages immediately
+        lastRenderedMsgIds = ''; // force full re-render
+        currentRenderedChat = selectedChat;
+        
         renderConversations(items);
-        // Load messages for this chat from engine
-        if (selectedSession && selectedChat) {
-            try {
-                let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200` });
-                engineMessages = Array.isArray(engineMessages) ? engineMessages : (engineMessages?.messages || []);
-                if (Array.isArray(engineMessages)) {
-                    latestMessages = engineMessages;
-                    lastMsgId = engineMessages.length ? (engineMessages[0]?.id || engineMessages[engineMessages.length-1]?.id || '') : '';
-                }
-            } catch (_) {}
-        }
-        renderChat();
-        // Scroll chat to bottom
+        
+        // Show immediate loader while fetching
         const body = $('chatBody');
-        if (body) body.scrollTop = 0; // column-reverse so 0 = bottom
+        if (body) {
+            body.innerHTML = '<div style="text-align:center; padding:40px;"><i class="fa-solid fa-spinner fa-spin fa-2x" style="color:#00d4ff;"></i><div style="margin-top:12px;color:#94a3b8;font-size:13px;">Cargando mensajes...</div></div>';
+        }
+
+        // Call the centralized load function
+        await loadCurrentChatMessages();
     }));
 }
 
-function renderChat() {
+// Global variable to track which chat is currently rendered
+let currentRenderedChat = null;
+let lastRenderedMsgIds = ''; // track what we last rendered to avoid unnecessary DOM work
+
+function buildBubble(m) {
+    const direction = String(m.direction || '').toLowerCase() === 'outgoing' ? 'outgoing' : 'incoming';
+    const msgType = String(m.type || 'text').toLowerCase();
+    const msgId = String(m.id || m._id || '');
+
+    let contentHtml = '';
+    
+    // Check if m.body looks like base64 (fallback if mediaData is missing)
+    let fallbackB64 = '';
+    if (m.body && m.body.length > 50 && !m.body.includes(' ') && !m.body.includes('\n')) {
+        fallbackB64 = m.body.startsWith('data:') ? m.body : `data:${m.mimetype || 'application/octet-stream'};base64,${m.body}`;
+    }
+
+    // Image support
+    if (msgType === 'image' || msgType === 'sticker') {
+        const imgSrc = m.mediaUrl || m.deprecatedMms3Url || '';
+        const mediaData = m.mediaData;
+        let b64Src = '';
+        if (mediaData && typeof mediaData === 'object') {
+            b64Src = mediaData.preview || mediaData.base64 || '';
+            if (b64Src && !b64Src.startsWith('data:')) {
+                const mime = m.mimetype || 'image/jpeg';
+                b64Src = `data:${mime};base64,${b64Src}`;
+            }
+        }
+        let finalSrc = b64Src || fallbackB64 || imgSrc;
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+
+        if (finalSrc) {
+            const alt = esc(m.caption || m.body || 'Imagen');
+            contentHtml = `<img src="${esc(finalSrc)}" alt="${alt}" class="wa-image" loading="lazy" onclick="openMediaModal(this.src, 'image')" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')" />`;
+            contentHtml += `<div style="display:none;color:#94a3b8;font-size:12px;">📷 [Imagen no disponible]</div>`;
+            const caption = m.caption || '';
+            if (caption && msgType !== 'sticker') {
+                contentHtml += `<div class="wa-caption">${esc(caption)}</div>`;
+            }
+        } else {
+            contentHtml = `<div>📷 ${esc(m.caption || '[imagen]')}</div>`;
+        }
+    }
+    // Video support
+    else if (msgType === 'video') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<video src="${esc(finalSrc)}" class="wa-image" onclick="openMediaModal(this.src, 'video')" style="max-width:100%; max-height: 250px; border-radius:8px;"></video>`;
+            contentHtml += `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:white; font-size:30px; pointer-events:none; text-shadow:0 2px 4px rgba(0,0,0,0.5);"><i class="fa-solid fa-play-circle"></i></div>`;
+            contentHtml = `<div style="position:relative; display:inline-block;">${contentHtml}</div>`;
+            const caption = m.caption || '';
+            if (caption) {
+                contentHtml += `<div class="wa-caption">${esc(caption)}</div>`;
+            }
+        } else {
+            contentHtml = `<div>🎥 ${esc(m.caption || '[video]')}</div>`;
+        }
+    }
+    // Audio/ptt support
+    else if (msgType === 'audio' || msgType === 'ptt') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<audio src="${esc(finalSrc)}" controls style="max-width:100%; height:40px; margin:4px 0; outline:none;"></audio>`;
+        } else {
+            contentHtml = `<div>🎵 ${esc(m.caption || '[audio]')}</div>`;
+        }
+    }
+    // Document support
+    else if (msgType === 'document') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<div>📄 <a href="${esc(finalSrc)}" download="${esc(m.caption || 'documento')}" style="color:#60a5fa; text-decoration:none;" target="_blank">${esc(m.caption || 'Descargar Documento')}</a></div>`;
+        } else {
+            contentHtml = `<div>📄 ${esc(m.caption || '[documento]')}</div>`;
+        }
+    }
+    // Default: text
+    else {
+        const text = m.body || `[${m.type || 'mensaje'}]`;
+        contentHtml = `<div>${esc(text)}</div>`;
+    }
+
+    const div = document.createElement('div');
+    div.className = `wa-bubble ${direction}`;
+    div.dataset.msgId = msgId;
+    div.innerHTML = `
+        ${contentHtml}
+        <div class="wa-meta"><span>${esc(direction === 'outgoing' ? 'Enviado' : 'Recibido')}</span><span>${esc(fmtDate(m.createdAt || m.timestamp))}</span><span>${esc(m.status || '')}</span></div>
+    `;
+    return div;
+}
+
+async function renderChat() {
     const body = $('chatBody');
-    const rows = selectedChat ? latestMessages.filter(m => m.chatId === selectedChat) : latestMessages;
+    let rows = selectedChat ? latestMessages.filter(m => m.chatId === selectedChat) : latestMessages;
+    rows.sort((a, b) => getMs(b) - getMs(a));
+
+    // Update UI counters and input states
     $('statMessages').textContent = latestMessages.length;
     $('messageInput').disabled = !selectedSession || !selectedChat;
+    $('mediaInput').disabled = !selectedSession || !selectedChat;
     $('sendBtn').disabled = !selectedSession || !selectedChat;
     $('chatSubtitle').textContent = selectedChat ? labelForChat(selectedChat) : 'Selecciona una conversacion para responder.';
+
+    // If chat changed, force full re-render
+    if (currentRenderedChat !== selectedChat) {
+        lastRenderedMsgIds = '';
+        currentRenderedChat = selectedChat;
+    }
+
+    // If no messages, show placeholder
     if (!rows.length) {
-        body.innerHTML = '<div class="wa-empty">Sin mensajes para mostrar.</div>';
+        if (lastRenderedMsgIds !== '__empty__') {
+            body.innerHTML = '<div class="wa-empty">Sin mensajes para mostrar.</div>';
+            lastRenderedMsgIds = '__empty__';
+        }
         return;
     }
-    body.innerHTML = rows.map(m => {
-        const direction = String(m.direction || '').toLowerCase() === 'outgoing' ? 'outgoing' : 'incoming';
-        const text = m.body || `[${m.type || 'mensaje'}]`;
-        return `<div class="wa-bubble ${direction}">
-            <div>${esc(text)}</div>
-            <div class="wa-meta"><span>${esc(direction === 'outgoing' ? 'Enviado' : 'Recibido')}</span><span>${esc(fmtDate(m.createdAt || m.timestamp))}</span><span>${esc(m.status || '')}</span></div>
-        </div>`;
-    }).join('');
+
+    // Check if anything actually changed
+    const newMsgIds = rows.map(m => String(m.id || m._id || '')).join('|');
+    if (newMsgIds === lastRenderedMsgIds) return; // nothing changed, skip DOM work
+
+    // Build all bubbles in a DocumentFragment (off-screen, no flicker)
+    const frag = document.createDocumentFragment();
+    for (const m of rows) {
+        frag.appendChild(buildBubble(m));
+    }
+
+    // Swap content in one paint frame
+    body.innerHTML = '';
+    body.appendChild(frag);
+    lastRenderedMsgIds = newMsgIds;
+
+    // Scroll to bottom (in column-reverse, scrollTop 0 = newest messages visible)
+    body.scrollTop = 0;
 }
 
 let lastMsgId = '';         // track last seen message id to detect new ones
@@ -832,10 +1083,14 @@ let unreadChats = {};       // chatId -> unread count map
 let msgPollTimer = null;    // fast timer for messages (3s)
 let chatListPollTimer = null; // slow timer for chat list (30s)
 
+function showChatListLoader(show) { const el = $('chatListLoader'); if (el) el.style.display = show ? 'block' : 'none'; }
+function showChatBodyLoader(show) { const el = $('chatBodyLoader'); if (el) el.style.display = show ? 'block' : 'none'; }
+
 async function loadChatList() {
     if (!selectedSession) return;
     const state = String(selectedSession.status || '').toLowerCase();
     if (!['ready','connected'].includes(state)) return;
+    if (!convos.length) showChatListLoader(true);
     try {
         let engineChats = await api('engine_chats', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000` });
         engineChats = Array.isArray(engineChats) ? engineChats
@@ -854,12 +1109,14 @@ async function loadChatList() {
             renderConversations(convos);
         }
     } catch (_) {}
+    finally { showChatListLoader(false); }
 }
 
 async function loadCurrentChatMessages() {
     if (!selectedSession || !selectedChat) return;
     const state = String(selectedSession.status || '').toLowerCase();
     if (!['ready','connected'].includes(state)) return;
+    if (currentRenderedChat !== selectedChat || latestMessages.length === 0) showChatBodyLoader(true);
     try {
         let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200` });
         engineMessages = Array.isArray(engineMessages) ? engineMessages
@@ -867,22 +1124,48 @@ async function loadCurrentChatMessages() {
             : (engineMessages?.messages || []));
         if (!Array.isArray(engineMessages)) return;
 
+        // Force chatId on every message — we already know which chat these belong to
+        engineMessages = engineMessages.map(m => ({ ...m, chatId: m.chatId || selectedChat }));
+
+        // Sort descending (newest first)
+        engineMessages.sort((a, b) => getMs(b) - getMs(a));
+
         // Detect new messages by comparing counts and last ID
         const newLastId = engineMessages.length ? (engineMessages[0]?.id || engineMessages[engineMessages.length-1]?.id || '') : '';
-        const hadNewMessages = newLastId && newLastId !== lastMsgId && latestMessages.length > 0;
+        const newestMsg = engineMessages[0];
+        const isIncoming = newestMsg && String(newestMsg.direction || '').toLowerCase() === 'incoming';
+        const hadNewMessages = newLastId && newLastId !== lastMsgId && latestMessages.length > 0 && isIncoming;
 
         if (hadNewMessages) {
-            // New message arrived â€” notify
             onNewMessage(selectedChat);
         }
 
         if (engineMessages.length > 0) {
             latestMessages = engineMessages;
             lastMsgId = newLastId;
+            // Update matching conversation in convos so the sidebar updates in real-time
+            const newestMsg = engineMessages[0];
+            const convo = convos.find(c => c.chatId === selectedChat);
+            if (convo) {
+                convo.lastBody = newestMsg.body || `[${newestMsg.type || 'mensaje'}]`;
+                convo.lastAt = newestMsg.createdAt || newestMsg.timestamp;
+                renderConversations(convos);
+            }
         }
 
-        renderChat();
-    } catch (_) {}
+        await renderChat();
+    } catch (err) {
+        console.error('[WA] loadCurrentChatMessages error:', err);
+        if (latestMessages.length === 0) {
+            const body = $('chatBody');
+            if (body) {
+                body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
+                lastRenderedMsgIds = '__error__';
+            }
+        }
+    } finally {
+        showChatBodyLoader(false);
+    }
 }
 
 function onNewMessage(chatId) {
@@ -890,7 +1173,7 @@ function onNewMessage(chatId) {
     let originalTitle = document.title;
     let flashCount = 0;
     const flashInterval = setInterval(() => {
-        document.title = flashCount % 2 === 0 ? 'ðŸ’¬ Nuevo mensaje!' : originalTitle;
+        document.title = flashCount % 2 === 0 ? '💬 Nuevo mensaje!' : originalTitle;
         flashCount++;
         if (flashCount > 6) {
             clearInterval(flashInterval);
@@ -957,6 +1240,7 @@ async function loadMessages(force) {
                 const data = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=200${selectedChat ? '&chat_id=' + encodeURIComponent(selectedChat) : ''}` });
                 const dbMsgs = Array.isArray(data.messages) ? data.messages : [];
                 if (dbMsgs.length) {
+                    dbMsgs.sort((a, b) => getMs(b) - getMs(a));
                     latestMessages = dbMsgs;
                     if (!convos.length) {
                         convos = Array.isArray(data.conversations) ? data.conversations : [];
@@ -1001,11 +1285,17 @@ function stopPolling() {
 
 async function getQrMaybe() {
     if (!selectedSession) return;
-    const status = String(selectedSession.status || '').toLowerCase();
-    if (['ready','connected'].includes(status)) {
-        $('qrBox').style.display = 'none';
-        return;
+    const stStatus = String(selectedSession.status || '').toLowerCase();
+    const canChat = selectedChat && ['ready','connected'].includes(stStatus);
+    
+    $('messageInput').disabled = !canChat;
+    $('mediaInput').disabled = !canChat;
+    $('sendBtn').disabled = !canChat;
+    
+    if (canChat && !msgPollTimer) {
+        // ... (existing logic)
     }
+    
     try {
         const data = await api('qr', { query: `&session_id=${encodeURIComponent(selectedSession.id)}` });
         const qr = data.qrCode || data.qr || data.dataUrl || '';
@@ -1024,17 +1314,27 @@ async function getQrMaybe() {
 $('refreshBtn').addEventListener('click', loadSessions);
 $('createSessionBtn').addEventListener('click', async () => {
     const name = $('newSessionName').value.trim() || 'mi-whatsapp';
+    const btn = $('createSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...';
+    btn.disabled = true;
     try {
         await api('create_session', { method:'POST', body:{ name } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
+    } finally {
+        btn.innerHTML = orig;
+        btn.disabled = false;
     }
 });
 
 $('startSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    $('startSessionBtn').disabled = true;
+    const btn = $('startSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Iniciando...';
+    btn.disabled = true;
     try {
         await api('start_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
@@ -1045,56 +1345,198 @@ $('startSessionBtn').addEventListener('click', async () => {
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
     }
 });
 
 $('stopSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    $('stopSessionBtn').disabled = true;
+    const btn = $('stopSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Cerrando...';
+    btn.disabled = true;
     try {
         await api('stop_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
     }
 });
 
 $('logoutSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    if (!confirm('Â¿Seguro que deseas desvincular esta cuenta de WhatsApp? TendrÃ¡s que volver a escanear el QR.')) return;
-    $('logoutSessionBtn').disabled = true;
+    if (!confirm('¿Seguro que deseas desvincular esta cuenta de WhatsApp? Tendrás que volver a escanear el QR.')) return;
+    const btn = $('logoutSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Desvinculando...';
+    btn.disabled = true;
     try {
         await api('logout_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
+    }
+});
+
+function clearMediaPreview() {
+    currentMediaFile = null;
+    $('mediaInput').value = '';
+    $('mediaPreview').style.display = 'none';
+    $('mediaPreviewImg').src = '';
+}
+
+function handleFileSelection(file) {
+    if (!file) {
+        clearMediaPreview();
+        return;
+    }
+    currentMediaFile = file;
+    const preview = $('mediaPreview');
+    const img = $('mediaPreviewImg');
+    const icon = $('mediaPreviewIcon');
+    const name = $('mediaPreviewName');
+    const size = $('mediaPreviewSize');
+    
+    name.textContent = file.name || 'Archivo pegado';
+    size.textContent = (file.size / 1024).toFixed(1) + ' KB';
+    
+    if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        img.src = url;
+        img.style.display = 'block';
+        icon.style.display = 'none';
+        // URL.revokeObjectURL(url) can be called later to save memory
+    } else {
+        img.style.display = 'none';
+        icon.style.display = 'block';
+        if (file.type.startsWith('video/')) icon.className = 'fa-solid fa-video';
+        else if (file.type.startsWith('audio/')) icon.className = 'fa-solid fa-music';
+        else icon.className = 'fa-solid fa-file';
+    }
+    preview.style.display = 'flex';
+}
+
+$('mediaInput').addEventListener('change', (e) => {
+    handleFileSelection(e.target.files[0]);
+    $('messageInput').focus();
+});
+
+$('messageInput').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file') {
+            const blob = item.getAsFile();
+            if (blob) {
+                // If it's pasted, it might not have a good name
+                const ext = blob.type.split('/')[1] || 'bin';
+                const f = new File([blob], `Pasted_${Date.now()}.${ext}`, { type: blob.type });
+                handleFileSelection(f);
+                e.preventDefault(); // Stop default pasting if it's an image
+                return;
+            }
+        }
     }
 });
 
 $('composeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = $('messageInput').value.trim();
-    if (!selectedSession || !selectedChat || !text) return;
+    const file = currentMediaFile;
+    
+    if (!selectedSession || !selectedChat || (!text && !file)) return;
     $('sendBtn').disabled = true;
     try {
-        await api('send_message', { method:'POST', body:{ session_id:selectedSession.id, chat_id:selectedChat, text } });
+        if (file) {
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            
+            const mimetype = file.type || 'application/octet-stream';
+            const filename = file.name || 'archivo';
+            
+            let endpoint = 'send-document';
+            if (mimetype.startsWith('image/')) endpoint = 'send-image';
+            else if (mimetype.startsWith('video/')) endpoint = 'send-video';
+            else if (mimetype.startsWith('audio/')) endpoint = 'send-audio';
+
+            await api('send_media', { 
+                method: 'POST', 
+                body: { 
+                    session_id: selectedSession.id, 
+                    chat_id: selectedChat, 
+                    caption: text,
+                    mimetype: mimetype,
+                    filename: filename,
+                    data: base64Data,
+                    endpoint: endpoint
+                } 
+            });
+            clearMediaPreview();
+        } else {
+            await api('send_message', { method:'POST', body:{ session_id:selectedSession.id, chat_id:selectedChat, text } });
+        }
+        
         $('messageInput').value = '';
         await loadMessages(false);
     } catch (err) {
-        alert(err.message);
+        alert("Error enviando: " + err.message);
     } finally {
         $('sendBtn').disabled = false;
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadSessions();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadSessions();
+    startPolling();
 });
+</script>
+
+<!-- Media Modal -->
+<div id="waMediaModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; backdrop-filter:blur(5px);">
+    <div style="position:absolute; top:20px; right:30px; display:flex; gap:20px; z-index:10000;">
+        <a id="waMediaDownload" href="#" download="media" style="color:white; font-size:26px; text-decoration:none; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" title="Descargar"><i class="fa-solid fa-download"></i></a>
+        <span id="waMediaClose" style="color:white; font-size:26px; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" title="Cerrar"><i class="fa-solid fa-xmark"></i></span>
+    </div>
+    <div id="waMediaContent" style="max-width:90%; max-height:85vh; display:flex; justify-content:center; align-items:center;"></div>
+</div>
+
+<script>
+function openMediaModal(src, type) {
+    const modal = document.getElementById('waMediaModal');
+    const content = document.getElementById('waMediaContent');
+    const download = document.getElementById('waMediaDownload');
+    
+    download.href = src;
+    
+    if (type === 'image') {
+        content.innerHTML = `<img src="${src}" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" />`;
+    } else if (type === 'video') {
+        content.innerHTML = `<video src="${src}" controls autoplay style="max-width:100%; max-height:85vh; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></video>`;
+    }
+    
+    modal.style.display = 'flex';
+    void modal.offsetWidth; // force reflow
+    modal.style.opacity = '1';
+    
+    document.getElementById('waMediaClose').onclick = () => {
+        modal.style.opacity = '0';
+        setTimeout(() => { modal.style.display = 'none'; content.innerHTML = ''; }, 200);
+    };
+    modal.onclick = (e) => {
+        if (e.target === modal || e.target === content) document.getElementById('waMediaClose').click();
+    };
+}
 </script>
 </body>
 </html>

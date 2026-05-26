@@ -497,6 +497,16 @@ export class MessageService {
     await engine.deleteMessage(dto.chatId, dto.messageId, dto.forEveryone ?? true);
   }
 
+  async getMessageMedia(sessionId: string, chatId: string, messageId: string): Promise<any> {
+    const engine = this.getEngine(sessionId);
+    if (engine.getMessageMedia) {
+      const media = await engine.getMessageMedia(chatId, messageId);
+      if (!media) throw new BadRequestException('Media not found or message has no media');
+      return media;
+    }
+    throw new BadRequestException('Engine does not support downloading media');
+  }
+
   private getEngine(sessionId: string) {
     const engine = this.sessionService.getEngine(sessionId);
     if (!engine) {

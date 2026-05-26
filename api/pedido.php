@@ -860,7 +860,7 @@ switch ($action) {
         jsonResponse($out);
 
     case 'panel_notificaciones':
-        if (!esAdmin() && !esInventario()) jsonResponse(['error' => 'Sin permiso'], 403);
+        if (!estaLogueado()) jsonResponse(['error' => 'Sin permiso', 'role' => $_SESSION['rol'] ?? null], 403);
         $limit = (int)($_GET['limit'] ?? 80);
         $limit = max(10, min($limit, 200));
         $out = [];

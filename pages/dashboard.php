@@ -137,7 +137,12 @@ for ($d = 1; $d <= $diasMes; $d++) {
         .panel-noti-item small { display: block; color: var(--text-muted); margin-top: 2px; font-size: 11px; }
     </style>
 </head>
-<body>
+<?php if (isset($_GET['error'])): ?>
+        <div class="alert alert-danger text-center" role="alert" style="margin:10px;">
+            Acceso denegado. Por favor verifica tus permisos.
+        </div>
+    <?php endif; ?>
+    
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="sidebar-logo">
