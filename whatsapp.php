@@ -188,7 +188,7 @@ function isPrimaryWhatsAppChat(string $chatId): bool {
         return false;
     }
 
-    return textEndsWith($chatId, '@c.us') || textEndsWith($chatId, '@g.us');
+    return textEndsWith($chatId, '@c.us') || textEndsWith($chatId, '@g.us') || textEndsWith($chatId, '@lid');
 }
 
 function normalizeMessages(array $payload): array {
@@ -769,15 +769,22 @@ const getMs = (m) => {
 
 
 async function api(action, options = {}) {
-    const res = await fetch(`whatsapp.php?action=${action}${options.query || ''}`, {
-        method: options.method || 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        cache: 'no-store'
-    });
-    const payload = await res.json().catch(() => ({ ok:false, error:'Respuesta invalida.' }));
-    if (!res.ok || payload.ok === false) throw new Error(payload.error || 'No se completo la accion.');
-    return payload.data ?? payload;
+    const controller = options.timeoutMs ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : null;
+    try {
+        const res = await fetch(`whatsapp.php?action=${action}${options.query || ''}`, {
+            method: options.method || 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            body: options.body ? JSON.stringify(options.body) : undefined,
+            cache: 'no-store',
+            signal: controller ? controller.signal : undefined
+        });
+        const payload = await res.json().catch(() => ({ ok:false, error:'Respuesta invalida.' }));
+        if (!res.ok || payload.ok === false) throw new Error(payload.error || 'No se completo la accion.');
+        return payload.data ?? payload;
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
 }
 
 async function refreshSelectedSession() {
@@ -808,7 +815,7 @@ function normalizeChatId(raw) {
 function isPrimaryChatId(chatId) {
     const id = normalizeChatId(chatId).toLowerCase();
     if (!id || id === 'status@broadcast' || id.endsWith('@broadcast')) return false;
-    return id.endsWith('@c.us') || id.endsWith('@g.us');
+    return id.endsWith('@c.us') || id.endsWith('@g.us') || id.endsWith('@lid');
 }
 
 function firstValue(...values) {
@@ -822,6 +829,7 @@ function fallbackChatName(chatId) {
     const id = normalizeChatId(chatId);
     if (id.endsWith('@g.us')) return id.replace('@g.us', ' (grupo)');
     if (id.endsWith('@c.us')) return '+' + id.replace('@c.us', '');
+    if (id.endsWith('@lid')) return id.replace('@lid', '');
     return id || 'Chat';
 }
 
@@ -1326,7 +1334,7 @@ async function loadChatList() {
     if (!['ready','connected'].includes(state)) return;
     if (!convos.length) showChatListLoader(true);
     try {
-        let engineChats = await api('engine_chats', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000` });
+        let engineChats = await api('engine_chats', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000`, timeoutMs: 8000 });
         engineChats = Array.isArray(engineChats) ? engineChats
             : (Array.isArray(engineChats?.value) ? engineChats.value
             : (Array.isArray(engineChats?.data) ? engineChats.data : []));
@@ -1336,6 +1344,14 @@ async function loadChatList() {
         }
     } catch (_) {}
     finally { showChatListLoader(false); }
+}
+
+async function loadDbMessages(chatId = '') {
+    if (!selectedSession) return [];
+    const data = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=200${chatId ? '&chat_id=' + encodeURIComponent(chatId) : ''}` });
+    return (Array.isArray(data.messages) ? data.messages : [])
+        .map(m => ({ ...m, chatId: normalizeChatId(m.chatId) }))
+        .filter(m => isPrimaryChatId(m.chatId) && (!chatId || m.chatId === chatId));
 }
 
 async function loadCurrentChatMessages() {
@@ -1351,16 +1367,20 @@ async function loadCurrentChatMessages() {
     if (!['ready','connected'].includes(state)) return;
     if (currentRenderedChat !== selectedChat || latestMessages.length === 0) showChatBodyLoader(true);
     try {
-        let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200` });
+        let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200`, timeoutMs: 8000 });
         engineMessages = Array.isArray(engineMessages) ? engineMessages
             : (Array.isArray(engineMessages?.value) ? engineMessages.value
             : (engineMessages?.messages || []));
-        if (!Array.isArray(engineMessages)) return;
+        if (!Array.isArray(engineMessages)) engineMessages = [];
 
         // Force chatId on every message — we already know which chat these belong to
         engineMessages = engineMessages
             .map(m => ({ ...m, chatId: normalizeChatId(m.chatId || selectedChat) }))
             .filter(m => m.chatId === selectedChat);
+
+        if (!engineMessages.length) {
+            engineMessages = await loadDbMessages(selectedChat);
+        }
 
         // Sort descending (newest first)
         engineMessages.sort((a, b) => getMs(b) - getMs(a));
@@ -1392,10 +1412,25 @@ async function loadCurrentChatMessages() {
     } catch (err) {
         console.error('[WA] loadCurrentChatMessages error:', err);
         if (latestMessages.length === 0) {
-            const body = $('chatBody');
-            if (body) {
-                body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
-                lastRenderedMsgIds = '__error__';
+            try {
+                const dbMsgs = await loadDbMessages(selectedChat);
+                if (dbMsgs.length) {
+                    dbMsgs.sort((a, b) => getMs(b) - getMs(a));
+                    latestMessages = dbMsgs;
+                    await renderChat();
+                } else {
+                    const body = $('chatBody');
+                    if (body) {
+                        body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
+                        lastRenderedMsgIds = '__error__';
+                    }
+                }
+            } catch (_) {
+                const body = $('chatBody');
+                if (body) {
+                    body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
+                    lastRenderedMsgIds = '__error__';
+                }
             }
         }
     } finally {
@@ -1481,6 +1516,9 @@ async function loadMessages(force) {
                     .filter(m => isPrimaryChatId(m.chatId) && (!selectedChat || m.chatId === selectedChat));
                 if (dbMsgs.length) {
                     dbMsgs.sort((a, b) => getMs(b) - getMs(a));
+                    if (!selectedChat) {
+                        selectedChat = dbMsgs[0].chatId;
+                    }
                     latestMessages = dbMsgs;
                     if (!convos.length) {
                         const fallbackConvos = Array.isArray(data.conversations) && data.conversations.length
