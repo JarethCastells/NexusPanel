@@ -545,6 +545,7 @@ if ($loteActivoId > 0) {
     <title>NexusPanel - Logistica Masiva</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/css/dashboard.css">
     <link rel="stylesheet" href="../assets/css/theme.css">
     <script src="../assets/js/theme.js"></script>
@@ -630,14 +631,9 @@ if ($loteActivoId > 0) {
         <?php if ($esAdmin): ?><a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
-        <?php if ($esAdmin): ?>
-        <a href="logistica_inteligente.php" class="nav-item"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span></a>
-        <?php endif; ?>
         
-        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
-
-        <div class="nav-section-label">Operaciones</div>
-        <?php if ($esAdmin): ?><a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a><?php endif; ?>
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes internos</span></a>
+        <a href="../whatsapp.php" class="nav-item"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a>
 
         <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>

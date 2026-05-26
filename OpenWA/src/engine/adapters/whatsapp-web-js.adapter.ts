@@ -96,6 +96,8 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         puppeteer: {
           headless: this.config.puppeteer?.headless ?? true,
           args: puppeteerArgs,
+          protocolTimeout: 300000, // 5 minutes timeout for large accounts
+          timeout: 60000,
         },
       });
 
@@ -408,20 +410,47 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       const chat = await this.client!.getChatById(chatId);
       const messages = await chat.fetchMessages({ limit });
 
-      return messages.map((msg: any) => ({
-        id: msg.id?._serialized || String(msg.id),
-        from: msg.from,
-        to: msg.to,
-        chatId: chat.id?._serialized || String(chat.id),
-        body: msg.body || msg.caption || '',
-        type: msg.type,
-        timestamp: msg.timestamp,
-        fromMe: msg.fromMe,
-        isGroup: chat.isGroup ?? (msg.from?.endsWith('@g.us') ?? false),
-      }));
+      return messages.map((msg: any) => {
+        const incomingMessage: IncomingMessage = {
+          id: msg.id?._serialized || String(msg.id),
+          from: msg.from,
+          to: msg.to,
+          chatId: chat.id?._serialized || String(chat.id),
+          body: msg.body || msg.caption || '',
+          type: msg.type,
+          timestamp: msg.timestamp,
+          fromMe: msg.fromMe,
+          isGroup: chat.isGroup ?? (msg.from?.endsWith('@g.us') ?? false),
+        };
+
+        return incomingMessage;
+      });
     } catch (error) {
       this.logger.error(`Failed to fetchChatMessages for ${chatId}`, String(error));
       return [];
+    }
+  }
+
+  async getMessageMedia(chatId: string, messageId: string): Promise<MediaInput | null> {
+    this.ensureReady();
+    try {
+      const chat = await this.client!.getChatById(chatId);
+      const messages = await chat.fetchMessages({ limit: 100 });
+      const msg = messages.find(m => m.id?._serialized === messageId || String(m.id) === messageId);
+      if (msg && msg.hasMedia) {
+        const media = await msg.downloadMedia();
+        if (media) {
+          return {
+            mimetype: media.mimetype,
+            data: media.data,
+            filename: media.filename || undefined,
+          };
+        }
+      }
+      return null;
+    } catch (error) {
+      this.logger.error(`Failed to download media for ${messageId}`, String(error));
+      return null;
     }
   }
 

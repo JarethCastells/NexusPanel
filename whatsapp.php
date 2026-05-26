@@ -614,6 +614,20 @@ if (isset($_GET['action'])) {
                 </div>
                 <div id="chatBodyLoader" class="wa-loader"></div>
                 <div class="wa-chat-body" id="chatBody"><div class="wa-empty">Aun no hay mensajes cargados.</div></div>
+                
+                <!-- Media Preview Area -->
+                <div id="mediaPreview" style="display:none; padding:10px; background:rgba(255,255,255,0.05); border-top:1px solid rgba(255,255,255,0.1); align-items:center; gap:10px;">
+                    <div id="mediaPreviewImgContainer" style="width:50px; height:50px; border-radius:8px; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center;">
+                        <img id="mediaPreviewImg" src="" style="max-width:100%; max-height:100%; object-fit:cover; display:none;">
+                        <i id="mediaPreviewIcon" class="fa-solid fa-file" style="color:white; display:none; font-size:24px;"></i>
+                    </div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div id="mediaPreviewName" style="color:white; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                        <div id="mediaPreviewSize" style="color:#94a3b8; font-size:11px;"></div>
+                    </div>
+                    <button type="button" class="btn-danger-custom" onclick="clearMediaPreview()" style="padding:5px 10px; border-radius:50%;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <form class="wa-compose" id="composeForm">
                     <label for="mediaInput" class="btn-secondary-custom" style="cursor:pointer; border-radius:999px; padding:9px 14px; margin-right:5px;" title="Adjuntar archivo">
                         <i class="fa-solid fa-paperclip"></i>
@@ -638,9 +652,9 @@ let latestMessages = [];
 let convos = [];
 let pollTimer = null;
 let currentQr = '';
+let currentMediaFile = null;
 
-
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const getMs = (m) => {
     const val = m.createdAt || m.timestamp;
@@ -1371,11 +1385,71 @@ $('logoutSessionBtn').addEventListener('click', async () => {
     }
 });
 
+function clearMediaPreview() {
+    currentMediaFile = null;
+    $('mediaInput').value = '';
+    $('mediaPreview').style.display = 'none';
+    $('mediaPreviewImg').src = '';
+}
+
+function handleFileSelection(file) {
+    if (!file) {
+        clearMediaPreview();
+        return;
+    }
+    currentMediaFile = file;
+    const preview = $('mediaPreview');
+    const img = $('mediaPreviewImg');
+    const icon = $('mediaPreviewIcon');
+    const name = $('mediaPreviewName');
+    const size = $('mediaPreviewSize');
+    
+    name.textContent = file.name || 'Archivo pegado';
+    size.textContent = (file.size / 1024).toFixed(1) + ' KB';
+    
+    if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        img.src = url;
+        img.style.display = 'block';
+        icon.style.display = 'none';
+        // URL.revokeObjectURL(url) can be called later to save memory
+    } else {
+        img.style.display = 'none';
+        icon.style.display = 'block';
+        if (file.type.startsWith('video/')) icon.className = 'fa-solid fa-video';
+        else if (file.type.startsWith('audio/')) icon.className = 'fa-solid fa-music';
+        else icon.className = 'fa-solid fa-file';
+    }
+    preview.style.display = 'flex';
+}
+
+$('mediaInput').addEventListener('change', (e) => {
+    handleFileSelection(e.target.files[0]);
+    $('messageInput').focus();
+});
+
+$('messageInput').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file') {
+            const blob = item.getAsFile();
+            if (blob) {
+                // If it's pasted, it might not have a good name
+                const ext = blob.type.split('/')[1] || 'bin';
+                const f = new File([blob], `Pasted_${Date.now()}.${ext}`, { type: blob.type });
+                handleFileSelection(f);
+                e.preventDefault(); // Stop default pasting if it's an image
+                return;
+            }
+        }
+    }
+});
+
 $('composeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = $('messageInput').value.trim();
-    const fileInput = $('mediaInput');
-    const file = fileInput.files[0];
+    const file = currentMediaFile;
     
     if (!selectedSession || !selectedChat || (!text && !file)) return;
     $('sendBtn').disabled = true;
@@ -1384,8 +1458,8 @@ $('composeForm').addEventListener('submit', async (e) => {
             const reader = new FileReader();
             reader.onload = async (event) => {
                 const base64Data = event.target.result;
-                const mimetype = file.type;
-                const filename = file.name;
+                const mimetype = file.type || 'application/octet-stream';
+                const filename = file.name || 'archivo';
                 
                 let endpoint = 'send-document';
                 if (mimetype.startsWith('image/')) endpoint = 'send-image';
@@ -1406,7 +1480,7 @@ $('composeForm').addEventListener('submit', async (e) => {
                 });
                 
                 $('messageInput').value = '';
-                fileInput.value = '';
+                clearMediaPreview();
                 await loadMessages(false);
                 $('sendBtn').disabled = false;
             };

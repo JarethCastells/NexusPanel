@@ -269,6 +269,7 @@ export interface IWhatsAppEngine {
 
   // Message Operations
   deleteMessage(chatId: string, messageId: string, forEveryone?: boolean): Promise<void>;
+  getMessageMedia?(chatId: string, messageId: string): Promise<MediaInput | null>;
 
   // Contact Extended Operations
   getProfilePicture(contactId: string): Promise<string | null>;

@@ -328,12 +328,9 @@ $citas = $pdo->query("SELECT c.*, l.nombre as linea_nombre FROM logistica_citas 
         <a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
-        <a href="logistica_inteligente.php" class="nav-item active"><i class="fa-solid fa-truck-fast"></i><span>Logística Inteligente</span><div class="nav-indicator"></div></a>
 
-        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes</span></a>
-
-        <div class="nav-section-label">Operaciones</div>
-        <a href="mapa.php" class="nav-item"><i class="fa-solid fa-map-location-dot"></i><span>Mapa de Usuarios</span></a>
+        <a href="mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes internos</span></a>
+        <a href="../whatsapp.php" class="nav-item"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a>
 
         <div class="nav-section-label">Cuenta</div>
         <a href="../logout.php" class="nav-item nav-logout"><i class="fa-solid fa-right-from-bracket"></i><span>Cerrar sesion</span></a>

@@ -35,6 +35,89 @@ function animateBars() {
     }, 400);
 }
 
+let previousRows = [];
+let previousUnseenCount = 0;
+async function pollPanelNotis(){
+    try{
+        const res = await fetch('../api/pedido.php?action=panel_notificaciones&limit=80', { cache:'no-store' });
+        if(!res.ok) return;
+        const rows = await res.json();
+        if(!Array.isArray(rows)) return;
+        // Only re-render if the data actually changed
+        if(JSON.stringify(rows) !== JSON.stringify(previousRows)){
+            renderPanelNotis(rows);
+            previousRows = rows;
+        }
+    }catch(_){}
+}
+function initPanelNotiBadge(count){
+    const badge = document.getElementById('panelNotiCount');
+    if(!badge) return;
+    badge.textContent = String(count);
+    badge.classList.toggle('hidden', count < 1);
+    // Add a brief pulse animation when count increases
+    if(count > previousUnseenCount){
+        badge.classList.add('pulse');
+        setTimeout(()=> badge.classList.remove('pulse'), 800);
+    }
+    previousUnseenCount = count;
+}
+let panelNotiElements = new Map(); // uid -> element
+function renderPanelNotis(rows){
+    const list = document.getElementById('panelNotiList');
+    const badge = document.getElementById('panelNotiCount');
+    if(!list || !badge) return;
+    panelNotiCache = Array.isArray(rows) ? rows : [];
+    const seen = panelNotiSeenGet();
+    const unseen = panelNotiCache.filter(r => !seen.has(String(r.uid || '')));
+    initPanelNotiBadge(unseen.length);
+    // Build a Set of current uids
+    const newUids = new Set(unseen.map(r => String(r.uid)));
+    // Remove elements that are no longer present
+    for (const [uid, el] of panelNotiElements.entries()) {
+        if (!newUids.has(uid)) {
+            el.remove();
+            panelNotiElements.delete(uid);
+        }
+    }
+    // Add or update elements
+    unseen.forEach(r => {
+        const uid = String(r.uid);
+        if (panelNotiElements.has(uid)) {
+            // Already exists, no need to re-create
+            return;
+        }
+        // Create new notification element
+        const a = document.createElement('a');
+        a.href = safe(r.goto || '#');
+        a.className = 'panel-noti-item';
+        a.style = seen.has(uid) ? '' : 'border-color:rgba(0,212,255,.55);box-shadow:0 0 0 1px rgba(0,212,255,.18) inset;';
+        a.innerHTML = `
+            <strong>${safe(r.title || 'Notificacion')}</strong>
+            <small>${safe(r.from || 'Sistema')}</small>
+            <div style="font-size:12px;color:var(--text-light);margin-top:4px;">${safe(r.body || '')}</div>
+            <small>${safe(r.ts || '')}</small>
+        `;
+        // Add fade-in animation for new items
+        a.classList.add('fade-in');
+        list.appendChild(a);
+        panelNotiElements.set(uid, a);
+    });
+    // If no notifications left, show placeholder
+    if (panelNotiElements.size === 0) {
+        list.innerHTML = '<div style="color:var(--text-muted);font-size:12px;padding:8px;">Sin notificaciones.</div>';
+    }
+}
+
+function initPanelNotis(){
+    const clearBtn = document.getElementById('btnPanelNotiClear');
+    const dropBtn = document.getElementById('panelNotiBtn');
+    clearBtn?.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); markPanelNotisRead(); });
+    dropBtn?.addEventListener('show.bs.dropdown', () => markPanelNotisRead());
+    pollPanelNotis();
+    setInterval(pollPanelNotis, 7000);
+}
+
 function initSidebar() {
     const mobileBtn = document.getElementById('mobileMenu');
     const sidebar = document.getElementById('sidebar') || document.querySelector('.sidebar');

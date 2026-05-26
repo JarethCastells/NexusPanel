@@ -234,6 +234,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
     });
     this.engines.set(id, engine);
 
+    await this.updateStatus(id, SessionStatus.INITIALIZING);
+
     await engine.initialize({
       onQRCode: (): void => {
         this.logger.log('QR code generated', {
@@ -362,8 +364,6 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
         }
       },
     });
-
-    await this.updateStatus(id, SessionStatus.INITIALIZING);
   }
 
   private scheduleReconnect(id: string, session: Session): void {
@@ -455,6 +455,42 @@ export class SessionService implements OnModuleDestroy, OnModuleInit {
       action: 'stop',
     });
     await this.updateStatus(id, SessionStatus.DISCONNECTED);
+    return this.findOne(id);
+  }
+
+  async logout(id: string): Promise<Session> {
+    const session = await this.findOne(id);
+
+    // Cancel any reconnection attempts
+    this.cancelReconnect(id);
+
+    const engine = this.engines.get(id);
+
+    if (engine) {
+      try {
+        await engine.logout();
+      } catch (error) {
+        this.logger.warn('Session logout failed, falling back to disconnect', {
+          sessionId: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await engine.disconnect();
+      }
+      this.engines.delete(id);
+    }
+
+    this.logger.log(`Session logged out and unpaired: ${session.name}`, {
+      sessionId: id,
+      action: 'logout',
+    });
+
+    await this.sessionRepository.update(id, {
+      status: SessionStatus.DISCONNECTED,
+      phone: null,
+      pushName: null,
+      connectedAt: null,
+    });
+
     return this.findOne(id);
   }
 
