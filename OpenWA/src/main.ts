@@ -66,7 +66,7 @@ STORAGE_PATH=./data/media
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   // Enable shutdown hooks for graceful shutdown
   app.enableShutdownHooks();
