@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Delete, Param, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { SessionService } from './session.service';
 import { CreateSessionDto, SessionResponseDto, QRCodeResponseDto } from './dto';
 import { Session } from './entities/session.entity';
@@ -9,6 +10,7 @@ import { RequireRole } from '../auth/decorators/auth.decorators';
 import { ApiKeyRole } from '../auth/entities/api-key.entity';
 
 @ApiTags('sessions')
+@SkipThrottle()
 @Controller('sessions')
 export class SessionController {
   constructor(
@@ -125,6 +127,26 @@ export class SessionController {
   @ApiResponse({ status: 404, description: 'Session not found' })
   async stop(@Param('id') id: string): Promise<SessionResponseDto> {
     const session = await this.sessionService.stop(id);
+    await this.auditService.logInfo(AuditAction.SESSION_STOPPED, {
+      sessionId: session.id,
+      sessionName: session.name,
+    });
+    return this.transformSession(session);
+  }
+
+  @Post(':id/logout')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Logout and unpair a WhatsApp session' })
+  @ApiParam({ name: 'id', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session logged out and unpaired successfully',
+    type: SessionResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  async logout(@Param('id') id: string): Promise<SessionResponseDto> {
+    const session = await this.sessionService.logout(id);
     await this.auditService.logInfo(AuditAction.SESSION_STOPPED, {
       sessionId: session.id,
       sessionName: session.name,
