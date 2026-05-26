@@ -174,6 +174,23 @@ function respondJson(array $payload, int $status = 200): void {
     exit;
 }
 
+function textEndsWith(string $value, string $suffix): bool {
+    return $suffix === '' || substr($value, -strlen($suffix)) === $suffix;
+}
+
+function isPrimaryWhatsAppChat(string $chatId): bool {
+    $chatId = strtolower(trim($chatId));
+    if ($chatId === '') {
+        return false;
+    }
+
+    if ($chatId === 'status@broadcast' || textEndsWith($chatId, '@broadcast')) {
+        return false;
+    }
+
+    return textEndsWith($chatId, '@c.us') || textEndsWith($chatId, '@g.us');
+}
+
 function normalizeMessages(array $payload): array {
     $messages = $payload['messages'] ?? $payload;
     if (!is_array($messages)) {
@@ -234,7 +251,7 @@ function conversationSummary(array $messages): array {
     $byChat = [];
     foreach ($messages as $message) {
         $chatId = $message['chatId'] ?? '';
-        if ($chatId === '') {
+        if ($chatId === '' || !isPrimaryWhatsAppChat((string)$chatId)) {
             continue;
         }
         if (!isset($byChat[$chatId])) {
@@ -540,9 +557,13 @@ if (isset($_GET['action'])) {
         .wa-session-delete:hover { background:rgba(239,68,68,0.3); color:#fff; }
 
         /* Conversation items */
-        .wa-convo { width:100%; text-align:left; border:1px solid rgba(255,255,255,0.04); border-radius:10px; padding:8px 10px; background:rgba(255,255,255,0.02); color:#e5edf8; margin-bottom:4px; cursor:pointer; transition:all .2s; display:block; }
-        .wa-convo strong { display:block; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700; }
-        .wa-convo span { display:block; color:var(--text-muted); font-size:10.5px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .wa-convo { width:100%; text-align:left; border:1px solid rgba(255,255,255,0.04); border-radius:12px; padding:9px 10px; background:rgba(255,255,255,0.02); color:#e5edf8; margin-bottom:6px; cursor:pointer; transition:all .2s; display:block; }
+        .wa-convo-top { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+        .wa-convo-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; font-weight:800; color:#f8fafc; }
+        .wa-convo-time { flex-shrink:0; color:rgba(148,163,184,.82); font-size:10px; }
+        .wa-convo-preview { display:block; color:var(--text-muted); font-size:10.8px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .wa-convo-meta { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:5px; }
+        .wa-convo-count { flex-shrink:0; border-radius:999px; padding:2px 7px; background:rgba(15,23,42,.66); border:1px solid rgba(148,163,184,.16); color:#bae6fd; font-size:10px; font-weight:800; }
         .wa-convo:hover { background:rgba(255,255,255,0.05); border-color:rgba(0,212,255,.3); transform:translateX(2px); }
         .wa-convo.active { background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,.55); }
 
@@ -775,10 +796,120 @@ async function refreshSelectedSession() {
     }
 }
 
+function normalizeChatId(raw) {
+    if (!raw) return '';
+    if (typeof raw === 'object') {
+        if (raw._serialized) return String(raw._serialized);
+        if (raw.user && raw.server) return `${raw.user}@${raw.server}`;
+    }
+    return String(raw).trim();
+}
+
+function isPrimaryChatId(chatId) {
+    const id = normalizeChatId(chatId).toLowerCase();
+    if (!id || id === 'status@broadcast' || id.endsWith('@broadcast')) return false;
+    return id.endsWith('@c.us') || id.endsWith('@g.us');
+}
+
+function firstValue(...values) {
+    for (const value of values) {
+        if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return '';
+}
+
+function fallbackChatName(chatId) {
+    const id = normalizeChatId(chatId);
+    if (id.endsWith('@g.us')) return id.replace('@g.us', ' (grupo)');
+    if (id.endsWith('@c.us')) return '+' + id.replace('@c.us', '');
+    return id || 'Chat';
+}
+
+function normalizeConversation(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const last = raw.lastMessage && typeof raw.lastMessage === 'object' ? raw.lastMessage : {};
+    const chatId = normalizeChatId(firstValue(
+        raw.chatId,
+        raw.id,
+        raw.remoteJid,
+        raw.remote,
+        raw.jid,
+        last.chatId,
+        last.fromMe ? last.to : last.from
+    ));
+    if (!isPrimaryChatId(chatId)) return null;
+
+    const rawLastMessage = typeof raw.lastMessage === 'string' ? raw.lastMessage : '';
+    const lastBody = firstValue(
+        raw.lastBody,
+        raw.lastMessageBody,
+        raw.lastMessageText,
+        rawLastMessage,
+        last.body,
+        last.text,
+        last.caption,
+        last.content,
+        raw.body,
+        raw.preview
+    );
+    const type = firstValue(raw.type, last.type, 'mensaje');
+    const lastAt = firstValue(
+        raw.lastAt,
+        raw.lastMessageAt,
+        raw.timestamp,
+        raw.t,
+        raw.updatedAt,
+        raw.createdAt,
+        last.timestamp,
+        last.createdAt
+    );
+    const unread = Number(firstValue(raw.unread, raw.unreadCount, raw.unreadMessages, 0)) || 0;
+    const count = Number(firstValue(raw.count, raw.messageCount, raw.total, 0)) || 0;
+
+    return {
+        chatId,
+        name: String(firstValue(raw.name, raw.pushName, raw.formattedTitle, raw.contactName, raw.displayName, fallbackChatName(chatId))),
+        lastBody: String(lastBody || (type ? `[${type}]` : '')),
+        lastAt,
+        unread,
+        count,
+        incoming: Number(raw.incoming || 0) || 0,
+        outgoing: Number(raw.outgoing || 0) || 0,
+        isGroup: Boolean(raw.isGroup || chatId.endsWith('@g.us')),
+    };
+}
+
+function normalizeConversationList(items) {
+    const byChat = new Map();
+    (Array.isArray(items) ? items : []).forEach(item => {
+        const convo = normalizeConversation(item);
+        if (!convo) return;
+        const existing = byChat.get(convo.chatId);
+        if (!existing) {
+            byChat.set(convo.chatId, convo);
+        } else {
+            const latest = getMs(convo.lastAt) >= getMs(existing.lastAt) ? convo : existing;
+            byChat.set(convo.chatId, {
+                ...existing,
+                ...latest,
+                count: (Number(existing.count) || 0) + (Number(convo.count) || 0),
+                incoming: (Number(existing.incoming) || 0) + (Number(convo.incoming) || 0),
+                outgoing: (Number(existing.outgoing) || 0) + (Number(convo.outgoing) || 0),
+                unread: Math.max(Number(existing.unread) || 0, Number(convo.unread) || 0),
+            });
+        }
+    });
+    return Array.from(byChat.values()).sort((a, b) => {
+        const diff = getMs(b.lastAt) - getMs(a.lastAt);
+        return diff || String(a.name || '').localeCompare(String(b.name || ''), 'es');
+    });
+}
+
 function labelForChat(chatId) {
-    const convo = Array.isArray(convos) ? convos.find(c => c.chatId === chatId) : null;
+    const normalized = normalizeChatId(chatId);
+    const convo = Array.isArray(convos) ? convos.find(c => c.chatId === normalized) : null;
     if (convo && convo.name) return convo.name;
-    return String(chatId || '').replace('@c.us', '').replace('@g.us', ' (grupo)');
+    return fallbackChatName(normalized);
 }
 
 function fmtDate(value) {
@@ -975,23 +1106,41 @@ async function deleteSession(id) {
 }
 
 function renderConversations(items) {
-    convos = items; // Keep global in sync
-    $('statConvos').textContent = items.length;
-    if ($('statConvosBadge')) $('statConvosBadge').textContent = items.length;
+    convos = normalizeConversationList(items);
+    if (selectedChat && !convos.some(c => c.chatId === selectedChat)) {
+        selectedChat = '';
+        latestMessages = [];
+        lastMsgId = '';
+        lastRenderedMsgIds = '';
+        currentRenderedChat = null;
+    }
+
+    $('statConvos').textContent = convos.length;
+    if ($('statConvosBadge')) $('statConvosBadge').textContent = convos.length;
     const list = $('conversationList');
-    if (!items.length) {
-        list.innerHTML = '<div class="wa-empty">Sin conversaciones todavia. Usa "Iniciar Nuevo Chat" para escribir.</div>';
+    if (!convos.length) {
+        list.innerHTML = '<div class="wa-empty">Sin chats reales para mostrar. Los estados y broadcasts no se muestran como conversaciones.</div>';
         return;
     }
-    list.innerHTML = items.map(c => `
+    list.innerHTML = convos.map(c => {
+        const countLabel = c.unread ? `${c.unread} nuevos` : (c.count ? `${c.count} mensajes` : '');
+        const preview = c.lastBody || (c.count ? `${c.count} mensajes` : 'Sin mensajes recientes');
+        return `
         <button class="wa-convo ${selectedChat === c.chatId ? 'active' : ''}" type="button" data-chat-id="${esc(c.chatId)}">
-            <strong>${esc(labelForChat(c.chatId))}</strong>
-            <span>${esc(c.lastBody || (c.count ? `${c.count} mensajes` : ''))}</span>
-            <span>${esc(fmtDate(c.lastAt))}</span>
+            <div class="wa-convo-top">
+                <span class="wa-convo-name">${esc(labelForChat(c.chatId))}</span>
+                <span class="wa-convo-time">${esc(fmtDate(c.lastAt))}</span>
+            </div>
+            <span class="wa-convo-preview">${esc(preview)}</span>
+            <div class="wa-convo-meta">
+                <span class="wa-muted">${esc(c.isGroup ? 'Grupo' : 'Contacto')}</span>
+                ${countLabel ? `<span class="wa-convo-count">${esc(countLabel)}</span>` : ''}
+            </div>
         </button>
-    `).join('');
+    `}).join('');
     list.querySelectorAll('.wa-convo').forEach(btn => btn.addEventListener('click', async () => {
         const chatId = btn.dataset.chatId || '';
+        if (!isPrimaryChatId(chatId)) return;
         if (selectedChat === chatId) return; // ignore clicking the already selected chat
 
         selectedChat = chatId;
@@ -1000,7 +1149,7 @@ function renderConversations(items) {
         lastRenderedMsgIds = ''; // force full re-render
         currentRenderedChat = selectedChat;
         
-        renderConversations(items);
+        renderConversations(convos);
         
         // Show immediate loader while fetching
         const body = $('chatBody');
@@ -1182,15 +1331,7 @@ async function loadChatList() {
             : (Array.isArray(engineChats?.value) ? engineChats.value
             : (Array.isArray(engineChats?.data) ? engineChats.data : []));
         if (engineChats.length) {
-            convos = engineChats.map(c => ({
-                chatId: c.id,
-                name: c.name || c.pushName || '',
-                lastBody: c.lastMessageBody || c.lastMessage || '',
-                lastAt: c.lastMessageAt || c.timestamp || null,
-                unread: c.unreadCount || 0,
-                isGroup: c.isGroup || false,
-                count: 0, incoming: 0, outgoing: 0,
-            }));
+            convos = normalizeConversationList(engineChats);
             renderConversations(convos);
         }
     } catch (_) {}
@@ -1199,6 +1340,13 @@ async function loadChatList() {
 
 async function loadCurrentChatMessages() {
     if (!selectedSession || !selectedChat) return;
+    if (!isPrimaryChatId(selectedChat)) {
+        selectedChat = '';
+        latestMessages = [];
+        renderConversations(convos);
+        await renderChat();
+        return;
+    }
     const state = String(selectedSession.status || '').toLowerCase();
     if (!['ready','connected'].includes(state)) return;
     if (currentRenderedChat !== selectedChat || latestMessages.length === 0) showChatBodyLoader(true);
@@ -1210,7 +1358,9 @@ async function loadCurrentChatMessages() {
         if (!Array.isArray(engineMessages)) return;
 
         // Force chatId on every message — we already know which chat these belong to
-        engineMessages = engineMessages.map(m => ({ ...m, chatId: m.chatId || selectedChat }));
+        engineMessages = engineMessages
+            .map(m => ({ ...m, chatId: normalizeChatId(m.chatId || selectedChat) }))
+            .filter(m => m.chatId === selectedChat);
 
         // Sort descending (newest first)
         engineMessages.sort((a, b) => getMs(b) - getMs(a));
@@ -1314,21 +1464,34 @@ async function loadMessages(force) {
         // Load messages for current chat
         if (selectedChat) {
             await loadCurrentChatMessages();
-        } else if (convos[0]) {
-            selectedChat = convos[0].chatId;
-            await loadCurrentChatMessages();
+        } else {
+            const firstRealChat = convos.find(c => isPrimaryChatId(c.chatId));
+            if (firstRealChat) {
+                selectedChat = firstRealChat.chatId;
+                await loadCurrentChatMessages();
+            }
         }
 
         // Fallback: DB messages if engine gave nothing
         if (!latestMessages.length) {
             try {
                 const data = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=200${selectedChat ? '&chat_id=' + encodeURIComponent(selectedChat) : ''}` });
-                const dbMsgs = Array.isArray(data.messages) ? data.messages : [];
+                const dbMsgs = (Array.isArray(data.messages) ? data.messages : [])
+                    .map(m => ({ ...m, chatId: normalizeChatId(m.chatId) }))
+                    .filter(m => isPrimaryChatId(m.chatId) && (!selectedChat || m.chatId === selectedChat));
                 if (dbMsgs.length) {
                     dbMsgs.sort((a, b) => getMs(b) - getMs(a));
                     latestMessages = dbMsgs;
                     if (!convos.length) {
-                        convos = Array.isArray(data.conversations) ? data.conversations : [];
+                        const fallbackConvos = Array.isArray(data.conversations) && data.conversations.length
+                            ? data.conversations
+                            : dbMsgs.map(m => ({
+                            chatId: m.chatId,
+                            lastBody: m.body || `[${m.type || 'mensaje'}]`,
+                            lastAt: m.createdAt || m.timestamp,
+                            count: 1,
+                        }));
+                        convos = normalizeConversationList(fallbackConvos);
                         renderConversations(convos);
                     }
                 }
