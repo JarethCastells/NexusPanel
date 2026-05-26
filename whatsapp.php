@@ -35,7 +35,78 @@ function openwaApiKey(): string {
     return 'dev-admin-key';
 }
 
+function openwaIsLocalUrl(): bool {
+    $host = parse_url(openwaBaseUrl(), PHP_URL_HOST);
+    return in_array(strtolower((string)$host), ['localhost', '127.0.0.1', '::1'], true);
+}
+
+function openwaIsRunning(): bool {
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'ignore_errors' => true,
+            'timeout' => 2,
+        ],
+    ]);
+
+    $raw = @file_get_contents(openwaBaseUrl() . '/api/health', false, $context);
+    return $raw !== false;
+}
+
+function startOpenwaFromProject(bool $waitForReady = true): bool {
+    if (!openwaIsLocalUrl() || getenv('OPENWA_AUTO_START') === 'false') {
+        return false;
+    }
+
+    if (openwaIsRunning()) {
+        return true;
+    }
+
+    $projectDir = __DIR__ . DIRECTORY_SEPARATOR . 'OpenWA';
+    $distMain = $projectDir . DIRECTORY_SEPARATOR . 'dist' . DIRECTORY_SEPARATOR . 'main.js';
+    $packageJson = $projectDir . DIRECTORY_SEPARATOR . 'package.json';
+    if (!is_dir($projectDir) || !is_file($distMain) || !is_file($packageJson)) {
+        return false;
+    }
+
+    $logsDir = __DIR__ . DIRECTORY_SEPARATOR . 'logs';
+    if (!is_dir($logsDir)) {
+        @mkdir($logsDir, 0775, true);
+    }
+    $outLog = $logsDir . DIRECTORY_SEPARATOR . 'openwa.out.log';
+    $errLog = $logsDir . DIRECTORY_SEPARATOR . 'openwa.err.log';
+    $port = parse_url(openwaBaseUrl(), PHP_URL_PORT) ?: 2785;
+
+    if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
+        $launcher = $logsDir . DIRECTORY_SEPARATOR . 'start_openwa.cmd';
+        $bat = "@echo off\r\n"
+            . "cd /D \"" . $projectDir . "\"\r\n"
+            . "set PORT=" . $port . "\r\n"
+            . "npm run start:prod >> \"" . $outLog . "\" 2>> \"" . $errLog . "\"\r\n";
+        @file_put_contents($launcher, $bat);
+        @pclose(@popen('start "" /B "' . $launcher . '"', 'r'));
+    } else {
+        $cmd = 'cd ' . escapeshellarg($projectDir) . ' && PORT=' . escapeshellarg((string)$port) . ' npm run start:prod >> ' . escapeshellarg($outLog) . ' 2>> ' . escapeshellarg($errLog) . ' &';
+        @exec($cmd);
+    }
+
+    if (!$waitForReady) {
+        return true;
+    }
+
+    for ($i = 0; $i < 10; $i++) {
+        usleep(700000);
+        if (openwaIsRunning()) {
+            return true;
+        }
+    }
+
+    return openwaIsRunning();
+}
+
 function openwaRequest(string $method, string $path, ?array $payload = null, array $query = []): array {
+    startOpenwaFromProject(false);
+
     $url = openwaBaseUrl() . '/api' . $path;
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
@@ -58,6 +129,10 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
     ]);
 
     $raw = @file_get_contents($url, false, $context);
+    if ($raw === false && startOpenwaFromProject(true)) {
+        $raw = @file_get_contents($url, false, $context);
+    }
+
     $status = 0;
     if (isset($http_response_header) && is_array($http_response_header)) {
         foreach ($http_response_header as $headerLine) {
@@ -69,7 +144,7 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
     }
 
     if ($raw === false) {
-        return ['ok' => false, 'status' => 0, 'error' => 'No se pudo conectar con OpenWA en ' . openwaBaseUrl()];
+        return ['ok' => false, 'status' => 0, 'error' => 'OpenWA todavia no responde en ' . openwaBaseUrl()];
     }
 
     $json = json_decode($raw, true);
@@ -807,18 +882,28 @@ async function loadSessions() {
         $('sessionStatus').textContent = 'sin conexion';
         $('sessionStatus').className = 'wa-status';
         $('sessionList').innerHTML = `
-            <div class="wa-empty" style="color:#fcd34d;line-height:1.55;">
-                OpenWA no esta activo.<br>
-                El panel esta listo, pero falta levantar el servicio en ${esc(baseUrl)}.
+            <div class="wa-empty" style="color:#bae6fd;line-height:1.55;">
+                <strong style="color:#f8fafc;">Servicio OpenWA pendiente</strong><br>
+                Inicia el backend en ${esc(baseUrl)} para habilitar sesiones y QR.
             </div>`;
-        $('conversationList').innerHTML = '<div class="wa-empty">Primero levanta OpenWA y crea o inicia una sesion.</div>';
-        $('chatTitle').textContent = 'WhatsApp pendiente de conexion';
-        $('chatSubtitle').textContent = 'El conector PHP funciona; falta que el backend OpenWA este corriendo.';
+        $('conversationList').innerHTML = '<div class="wa-empty">Cuando OpenWA responda, aqui se cargaran tus chats.</div>';
+        $('chatTitle').textContent = 'Conecta OpenWA para continuar';
+        $('chatSubtitle').textContent = 'El panel ya esta integrado; solo falta que el servicio local este activo.';
         $('chatBody').innerHTML = `
-            <div class="wa-empty" style="max-width:560px;margin:0 auto;line-height:1.7;color:#cbd5e1;">
-                <strong style="color:#f8fafc;">No se pudo conectar con OpenWA.</strong><br>
-                Necesitamos el backend OpenWA de tu companero o la URL donde este corriendo.
-                Cuando responda en <code style="color:#67e8f9;">${esc(baseUrl)}</code>, aqui apareceran las sesiones, QR, chats y mensajes.
+            <div class="wa-empty" style="max-width:640px;margin:0 auto;line-height:1.65;color:#cbd5e1;text-align:left;">
+                <div style="display:flex;gap:14px;align-items:flex-start;padding:18px 20px;border:1px solid rgba(14,165,233,.28);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.12),rgba(15,23,42,.62));box-shadow:0 18px 45px rgba(0,0,0,.22);">
+                    <div style="width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(14,165,233,.16);color:#38bdf8;border:1px solid rgba(56,189,248,.28);">
+                        <i class="fa-brands fa-whatsapp"></i>
+                    </div>
+                    <div>
+                        <strong style="display:block;color:#f8fafc;font-size:16px;margin-bottom:6px;">Listo para vincular WhatsApp</strong>
+                        <span>El dashboard ya esta conectado al modulo. Para empezar, levanta OpenWA y despues refresca esta vista.</span>
+                        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+                            <span style="padding:7px 10px;border-radius:999px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.18);color:#93c5fd;">URL esperada: ${esc(baseUrl)}</span>
+                            <span style="padding:7px 10px;border-radius:999px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.18);color:#86efac;">Al conectar: sesiones, QR, chats y mensajes</span>
+                        </div>
+                    </div>
+                </div>
             </div>`;
         $('createSessionBtn').disabled = true;
         $('startSessionBtn').disabled = true;
