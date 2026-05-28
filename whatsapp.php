@@ -701,6 +701,7 @@ if (isset($_GET['action'])) {
                     <div id="chatListLoader" style="height:3px; width:100%; background:rgba(0,212,255,0.1); position:relative; overflow:hidden; flex-shrink:0; display:none;">
                         <div id="chatListProgressBar" style="height:100%; width:0%; background:#00d4ff; border-radius:3px;"></div>
                     </div>
+                    <div id="chatListLoader" class="wa-loader"></div>
                     <div class="wa-convos-list" id="conversationList"><div class="wa-empty">Selecciona una sesiÃ³n.</div></div>
                 </div>
             </section>

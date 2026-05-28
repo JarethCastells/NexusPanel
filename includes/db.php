@@ -30,6 +30,7 @@ try {
     ensureNexusSchemaV2($pdo);
     ensureLogisticaMasivaSchema($pdo);
     ensureLogisticaInteligenteSchema($pdo);
+    ensureEmailInboxSchema($pdo);
     ensureCatalogoClienteSeed($pdo);
 } catch (PDOException $e) {
     // Mensaje amigable si no puede conectar
@@ -164,6 +165,33 @@ function constraintExists(PDO $pdo, string $table, string $constraint): bool {
     ");
     $st->execute([$table, $constraint]);
     return (int)$st->fetchColumn() > 0;
+}
+
+function ensureEmailInboxSchema(PDO $pdo): void {
+    static $ran = false;
+    if ($ran) return;
+    $ran = true;
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS email_inbox_messages (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            message_id VARCHAR(255) NOT NULL,
+            imap_uid BIGINT UNSIGNED NULL,
+            from_email VARCHAR(255) NULL,
+            from_name VARCHAR(255) NULL,
+            subject VARCHAR(500) NULL,
+            body_text LONGTEXT NULL,
+            body_html LONGTEXT NULL,
+            received_at DATETIME NULL,
+            fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            is_unseen TINYINT(1) NOT NULL DEFAULT 1,
+            source_mailbox VARCHAR(120) NOT NULL DEFAULT 'INBOX',
+            raw_headers LONGTEXT NULL,
+            UNIQUE KEY uq_email_inbox_message_id (message_id),
+            KEY idx_email_inbox_received_at (received_at),
+            KEY idx_email_inbox_unseen (is_unseen)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
 }
 
 function normalizarFechaMysql(?string $valor, bool $permitirSoloFecha = false): ?string {

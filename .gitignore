@@ -1,3 +1,11 @@
 .env
 /.env
 logs/
+node_modules/
+vendor/
+storage/logs/
+storage/sessions/
+uploads/
+_codex_write_probe.tmp
+_rebase_backups/
+OpenWA/openwa

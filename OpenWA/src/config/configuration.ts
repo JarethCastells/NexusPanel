@@ -67,13 +67,13 @@ export default () => ({
     rateLimit: {
       // Short burst protection: 10 requests per second
       shortTtl: parseInt(process.env.RATE_LIMIT_SHORT_TTL || '1000', 10),
-      shortLimit: parseInt(process.env.RATE_LIMIT_SHORT_LIMIT || '10', 10),
+      shortLimit: parseInt(process.env.RATE_LIMIT_SHORT_LIMIT || '1000', 10),
       // Medium protection: 100 requests per minute
       mediumTtl: parseInt(process.env.RATE_LIMIT_MEDIUM_TTL || '60000', 10),
-      mediumLimit: parseInt(process.env.RATE_LIMIT_MEDIUM_LIMIT || '100', 10),
+      mediumLimit: parseInt(process.env.RATE_LIMIT_MEDIUM_LIMIT || '10000', 10),
       // Long protection: 1000 requests per hour
       longTtl: parseInt(process.env.RATE_LIMIT_LONG_TTL || '3600000', 10),
-      longLimit: parseInt(process.env.RATE_LIMIT_LONG_LIMIT || '1000', 10),
+      longLimit: parseInt(process.env.RATE_LIMIT_LONG_LIMIT || '100000', 10),
     },
   },
 

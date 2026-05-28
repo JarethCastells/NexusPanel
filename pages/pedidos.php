@@ -47,8 +47,17 @@ function ensureEmailDashboardSchema(PDO $pdo): void {
     if (!columnExists($pdo, 'email_inbox_messages', 'ai_delivery_date')) {
         $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_delivery_date VARCHAR(120) NULL AFTER ai_quantity");
     }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_delivery_date_value')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_delivery_date_value DATE NULL AFTER ai_delivery_date");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_delivery_time_value')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_delivery_time_value TIME NULL AFTER ai_delivery_date_value");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_delivery_type')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_delivery_type VARCHAR(40) NULL AFTER ai_delivery_time_value");
+    }
     if (!columnExists($pdo, 'email_inbox_messages', 'ai_customer')) {
-        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_customer VARCHAR(255) NULL AFTER ai_delivery_date");
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_customer VARCHAR(255) NULL AFTER ai_delivery_type");
     }
     if (!columnExists($pdo, 'email_inbox_messages', 'ai_observations')) {
         $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_observations TEXT NULL AFTER ai_customer");
@@ -65,11 +74,167 @@ function ensureEmailDashboardSchema(PDO $pdo): void {
     if (!columnExists($pdo, 'email_inbox_messages', 'ai_raw_json')) {
         $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_raw_json LONGTEXT NULL AFTER ai_model");
     }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_category')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_category VARCHAR(80) NULL AFTER ai_raw_json");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_processing_status')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_processing_status VARCHAR(80) NULL AFTER ai_category");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_alerts')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_alerts TEXT NULL AFTER ai_processing_status");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'ai_stock_json')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_stock_json LONGTEXT NULL AFTER ai_alerts");
+    }
     if (!columnExists($pdo, 'email_inbox_messages', 'ai_extracted_at')) {
-        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_extracted_at DATETIME NULL AFTER ai_raw_json");
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN ai_extracted_at DATETIME NULL AFTER ai_stock_json");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'confirmed_pedido_id')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN confirmed_pedido_id INT NULL AFTER ai_extracted_at");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'confirmation_sent_at')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN confirmation_sent_at DATETIME NULL AFTER confirmed_pedido_id");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'confirmation_email_status')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN confirmation_email_status VARCHAR(30) NULL AFTER confirmation_sent_at");
+    }
+    if (!columnExists($pdo, 'email_inbox_messages', 'confirmation_email_error')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD COLUMN confirmation_email_error TEXT NULL AFTER confirmation_email_status");
     }
     if (!indexExists($pdo, 'email_inbox_messages', 'idx_email_inbox_review_status')) {
         $pdo->exec("ALTER TABLE email_inbox_messages ADD INDEX idx_email_inbox_review_status (review_status)");
+    }
+    if (!indexExists($pdo, 'email_inbox_messages', 'idx_email_inbox_confirmed_pedido')) {
+        $pdo->exec("ALTER TABLE email_inbox_messages ADD INDEX idx_email_inbox_confirmed_pedido (confirmed_pedido_id)");
+    }
+
+    if (tableExists($pdo, 'pedidos')) {
+        if (!columnExists($pdo, 'pedidos', 'source_channel')) {
+            $pdo->exec("ALTER TABLE pedidos ADD COLUMN source_channel VARCHAR(30) NOT NULL DEFAULT 'web' AFTER estado");
+        }
+        if (!columnExists($pdo, 'pedidos', 'source_email_id')) {
+            $pdo->exec("ALTER TABLE pedidos ADD COLUMN source_email_id BIGINT UNSIGNED NULL AFTER source_channel");
+        }
+        if (!columnExists($pdo, 'pedidos', 'source_message_id')) {
+            $pdo->exec("ALTER TABLE pedidos ADD COLUMN source_message_id VARCHAR(255) NULL AFTER source_email_id");
+        }
+        if (!indexExists($pdo, 'pedidos', 'idx_pedidos_source_email')) {
+            $pdo->exec("ALTER TABLE pedidos ADD INDEX idx_pedidos_source_email (source_email_id)");
+        }
+        if (!indexExists($pdo, 'pedidos', 'idx_pedidos_source_channel')) {
+            $pdo->exec("ALTER TABLE pedidos ADD INDEX idx_pedidos_source_channel (source_channel)");
+        }
+    }
+
+    if (tableExists($pdo, 'pedidos')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS pedido_historial_estados (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                pedido_id INT NOT NULL,
+                estado VARCHAR(40) NOT NULL,
+                nota VARCHAR(255) NULL,
+                usuario_id INT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_phe_pedido (pedido_id),
+                KEY idx_phe_estado (estado)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+    if (tableExists($pdo, 'usuarios') && tableExists($pdo, 'productos')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS cliente_producto_historial (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                cliente_id INT NOT NULL,
+                producto_id INT NOT NULL,
+                cantidad_total INT NOT NULL DEFAULT 0,
+                veces_pedido INT NOT NULL DEFAULT 0,
+                ultima_fecha DATETIME NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY ux_cliente_producto (cliente_id, producto_id),
+                KEY idx_historial_cliente (cliente_id),
+                KEY idx_historial_producto (producto_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+    if (tableExists($pdo, 'productos')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS inventario_movimientos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                producto_id INT NOT NULL,
+                tipo ENUM('entrada','salida','ajuste','reserva','liberacion') NOT NULL,
+                cantidad INT NOT NULL,
+                stock_anterior INT NOT NULL,
+                stock_nuevo INT NOT NULL,
+                referencia_tipo VARCHAR(40) NULL,
+                referencia_id INT NULL,
+                nota VARCHAR(255) NULL,
+                created_by INT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_im_producto (producto_id),
+                KEY idx_im_fecha (created_at),
+                KEY idx_im_ref (referencia_tipo, referencia_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+    if (tableExists($pdo, 'pedidos')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS notificaciones_eventos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                pedido_id INT NOT NULL,
+                cliente_id INT NOT NULL,
+                canal ENUM('interno','email','whatsapp','sms','llamada') NOT NULL,
+                evento VARCHAR(60) NOT NULL,
+                mensaje TEXT NOT NULL,
+                estado ENUM('pendiente','enviado','error') NOT NULL DEFAULT 'pendiente',
+                metadata_json LONGTEXT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_ne_pedido (pedido_id),
+                KEY idx_ne_cliente (cliente_id),
+                KEY idx_ne_estado (estado)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    }
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS auditoria_eventos (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT NULL,
+            rol VARCHAR(40) NULL,
+            modulo VARCHAR(80) NOT NULL,
+            accion VARCHAR(80) NOT NULL,
+            referencia_tipo VARCHAR(40) NULL,
+            referencia_id INT NULL,
+            detalles TEXT NULL,
+            ip_origen VARCHAR(80) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_auditoria_usuario (usuario_id),
+            KEY idx_auditoria_modulo (modulo),
+            KEY idx_auditoria_ref (referencia_tipo, referencia_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ");
+
+    if (!tableExists($pdo, 'email_inbox_ai_items')) {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS email_inbox_ai_items (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                email_id BIGINT UNSIGNED NOT NULL,
+                line_index INT NOT NULL DEFAULT 0,
+                product_text VARCHAR(255) NOT NULL,
+                product_id INT NULL,
+                product_code VARCHAR(80) NULL,
+                product_name VARCHAR(255) NULL,
+                quantity_value DECIMAL(12,3) NULL,
+                unit_slug VARCHAR(40) NOT NULL DEFAULT 'otro',
+                unit_text VARCHAR(80) NULL,
+                stock_available DECIMAL(12,3) NULL,
+                stock_missing DECIMAL(12,3) NULL,
+                stock_status VARCHAR(40) NOT NULL DEFAULT 'producto_no_encontrado',
+                match_score INT NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_ai_items_email (email_id),
+                KEY idx_ai_items_product (product_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
     }
 
     if (!tableExists($pdo, 'mail_accounts')) {
@@ -263,7 +428,7 @@ function testImapAccountConnection(array $account): void
     imap_close($imap);
 }
 
-function compactMailText(string $text, int $maxLength = 6000): string
+function compactMailText(string $text, int $maxLength = 3500): string
 {
     $text = preg_replace('/[ \t]+/', ' ', $text) ?? $text;
     $text = preg_replace("/\n{3,}/", "\n\n", $text) ?? $text;
@@ -292,7 +457,7 @@ function extractJsonObjectFromText(string $content): array
     throw new RuntimeException('La IA respondio, pero no regreso JSON valido.');
 }
 
-function normalizeAiExtraction(array $data): array
+function normalizeAiExtractionLegacy(array $data): array
 {
     $confidence = $data['nivel_confianza'] ?? $data['confianza'] ?? $data['confidence'] ?? null;
     $confidence = is_numeric($confidence) ? (float)$confidence : null;
@@ -321,6 +486,653 @@ function normalizeAiExtraction(array $data): array
     ];
 }
 
+function normalizeAiConfidence($value): ?float
+{
+    $confidence = is_numeric($value) ? (float)$value : null;
+    if ($confidence !== null && $confidence <= 1) {
+        $confidence *= 100;
+    }
+    return $confidence !== null ? max(0, min(100, $confidence)) : null;
+}
+
+function aiText($value): string
+{
+    if ($value === null) return '';
+    if (is_bool($value)) return $value ? 'Si' : 'No';
+    if (is_scalar($value)) return trim((string)$value);
+    if (is_array($value)) {
+        $parts = [];
+        foreach ($value as $item) {
+            $txt = aiText($item);
+            if ($txt !== '') $parts[] = $txt;
+        }
+        return implode(', ', $parts);
+    }
+    return '';
+}
+
+function aiList($value): array
+{
+    if ($value === null || $value === '') return [];
+    if (!is_array($value)) {
+        $txt = aiText($value);
+        return $txt !== '' ? [$txt] : [];
+    }
+    $out = [];
+    foreach ($value as $item) {
+        $txt = aiText($item);
+        if ($txt !== '') $out[] = $txt;
+    }
+    return $out;
+}
+
+function normalizeAlertKey(string $value): string
+{
+    return aiSearchKey($value);
+}
+
+function uniqueAiAlerts(array $alerts): array
+{
+    $seen = [];
+    $out = [];
+    foreach ($alerts as $alert) {
+        $alert = trim((string)$alert);
+        if ($alert === '') continue;
+        $key = normalizeAlertKey($alert);
+        if ($key === '' || isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = $alert;
+    }
+    return $out;
+}
+
+function alertIsStockConfirmation(string $alert): bool
+{
+    $key = normalizeAlertKey($alert);
+    return strpos($key, 'CONFIRMAR EXISTENCIA') !== false
+        || strpos($key, 'CONFIRMAR DISPONIBILIDAD') !== false
+        || strpos($key, 'EXISTENCIA COMPLETA') !== false;
+}
+
+function alertIsMissingQuantity(string $alert): bool
+{
+    $key = normalizeAlertKey($alert);
+    return strpos($key, 'FALTAN CANTIDADES') !== false
+        || strpos($key, 'FALTA CANTIDAD') !== false
+        || strpos($key, 'CANTIDAD FALTANTE') !== false;
+}
+
+function alertIsProductAmbiguous(string $alert): bool
+{
+    $key = normalizeAlertKey($alert);
+    return strpos($key, 'PRODUCTO AMBIGUO') !== false
+        || strpos($key, 'PRODUCTOS AMBIGUOS') !== false
+        || strpos($key, 'PRODUCTO NO CLARO') !== false;
+}
+
+function parseQuantityValue($value): array
+{
+    $text = aiText($value);
+    $numeric = null;
+    $unit = '';
+    if (preg_match('/(-?\d+(?:[.,]\d+)?)/', $text, $m)) {
+        $numeric = (float)str_replace(',', '.', $m[1]);
+        $unit = trim(preg_replace('/^-?\d+(?:[.,]\d+)?\s*/', '', $text) ?? '');
+    }
+    return [$text, $numeric, $unit];
+}
+
+function normalizeUnitSlug(string $unitText): string
+{
+    $key = aiSearchKey($unitText);
+    if ($key === '') return 'otro';
+    if (in_array($key, ['PZ', 'PZA', 'PZAS', 'PIEZA', 'PIEZAS', 'UNIDAD', 'UNIDADES'], true)) return 'piezas';
+    if (in_array($key, ['KG', 'KILO', 'KILOS', 'KILOGRAMO', 'KILOGRAMOS'], true)) return 'kg';
+    if (in_array($key, ['TON', 'TONELADA', 'TONELADAS', 'T'], true)) return 'toneladas';
+    if (in_array($key, ['CAJA', 'CAJAS', 'BOX'], true)) return 'cajas';
+    if (in_array($key, ['BULTO', 'BULTOS', 'BAG', 'BAGS'], true)) return 'bultos';
+    if (in_array($key, ['LT', 'L', 'LITRO', 'LITROS'], true)) return 'litros';
+    return 'otro';
+}
+
+function inferAiProductsFromMailText(string $text): array
+{
+    $products = [];
+    $source = trim($text);
+    if ($source === '') return [];
+
+    if (preg_match_all('/Producto\s*\d+\s*:\s*([^\r\n]+)\R\s*Cantidad\s*:\s*(\d+(?:[.,]\d+)?)\s*([^\r\n]*)/iu', $source, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $m) {
+            $unit = trim((string)($m[3] ?? ''));
+            $products[] = [
+                'producto' => aiText($m[1] ?? ''),
+                'cantidad_texto' => aiText($m[2] ?? ''),
+                'cantidad_numero' => (float)str_replace(',', '.', (string)($m[2] ?? '')),
+                'unidad' => normalizeUnitSlug($unit),
+                'unidad_slug' => normalizeUnitSlug($unit),
+                'confianza' => 96.0,
+            ];
+        }
+    }
+
+    if (!$products && preg_match_all('/(?:Solicito|Solicitamos|Necesito|Necesitamos|Requiero|Requerimos)\s+(\d+(?:[.,]\d+)?)\s+([[:alpha:]áéíóúÁÉÍÓÚñÑ]+)\s+de\s+(.+?)(?=\s+para\s+entrega|\s+para\s+el|\s+con\s+entrega|\.|\R|$)/iu', $source, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $m) {
+            $unit = normalizeUnitSlug((string)($m[2] ?? ''));
+            $products[] = [
+                'producto' => aiText($m[3] ?? ''),
+                'cantidad_texto' => aiText($m[1] ?? ''),
+                'cantidad_numero' => (float)str_replace(',', '.', (string)($m[1] ?? '')),
+                'unidad' => $unit,
+                'unidad_slug' => $unit,
+                'confianza' => 94.0,
+            ];
+        }
+    }
+
+    return array_values(array_filter($products, static fn($item) => trim((string)($item['producto'] ?? '')) !== ''));
+}
+
+function productLooksLikeSameRequest(string $shortName, string $longName): bool
+{
+    $short = aiSearchKey($shortName);
+    $long = aiSearchKey($longName);
+    return $short !== '' && $long !== '' && (strpos($long, $short) !== false || strpos($short, $long) !== false);
+}
+
+function enrichAiExtractionFromMailText(array $data, string $mailText): array
+{
+    $inferred = inferAiProductsFromMailText($mailText);
+    if ($inferred) {
+        if (empty($data['productos'])) {
+            $data['productos'] = $inferred;
+        } else {
+            foreach ($inferred as $idx => $inferredItem) {
+                $current = $data['productos'][$idx] ?? null;
+                if (!$current) {
+                    $data['productos'][] = $inferredItem;
+                    continue;
+                }
+                $currentName = aiText($current['producto'] ?? '');
+                $inferredName = aiText($inferredItem['producto'] ?? '');
+                if ($inferredName !== '' && (strlen($inferredName) > strlen($currentName)) && productLooksLikeSameRequest($currentName, $inferredName)) {
+                    $data['productos'][$idx]['producto'] = $inferredName;
+                }
+                if (($data['productos'][$idx]['cantidad_numero'] ?? null) === null && ($inferredItem['cantidad_numero'] ?? null) !== null) {
+                    $data['productos'][$idx]['cantidad_numero'] = $inferredItem['cantidad_numero'];
+                    $data['productos'][$idx]['cantidad_texto'] = $inferredItem['cantidad_texto'];
+                }
+                if (normalizeUnitSlug(aiText($data['productos'][$idx]['unidad'] ?? '')) === 'otro' && ($inferredItem['unidad_slug'] ?? '') !== 'otro') {
+                    $data['productos'][$idx]['unidad'] = $inferredItem['unidad_slug'];
+                    $data['productos'][$idx]['unidad_slug'] = $inferredItem['unidad_slug'];
+                }
+            }
+        }
+        $firstProduct = $data['productos'][0] ?? null;
+        if ($firstProduct) {
+            $data['producto_solicitado'] = aiText($firstProduct['producto'] ?? '');
+            $data['cantidad'] = aiText($firstProduct['cantidad_texto'] ?? '');
+        }
+    }
+
+    if (trim((string)($data['categoria'] ?? '')) === '' && ($data['es_pedido'] ?? null) === true) {
+        $data['categoria'] = 'pedido_compra';
+    }
+    return $data;
+}
+
+function normalizeAiProducts(array $data): array
+{
+    $rawProducts = $data['productos'] ?? $data['items'] ?? $data['lineas'] ?? null;
+    $products = [];
+
+    if (is_array($rawProducts)) {
+        foreach ($rawProducts as $item) {
+            if (is_array($item)) {
+                $name = aiText($item['producto'] ?? $item['nombre'] ?? $item['producto_solicitado'] ?? $item['descripcion'] ?? '');
+                [$quantityText, $quantityNumber, $unitFromText] = parseQuantityValue($item['cantidad'] ?? $item['qty'] ?? '');
+                $unit = aiText($item['unidad'] ?? $item['unidad_medida'] ?? $unitFromText);
+                $confidence = normalizeAiConfidence($item['confianza'] ?? $item['nivel_confianza'] ?? null);
+            } else {
+                $name = aiText($item);
+                $quantityText = '';
+                $quantityNumber = null;
+                $unit = '';
+                $confidence = null;
+            }
+            if ($name !== '' || $quantityText !== '') {
+                $products[] = [
+                    'producto' => $name,
+                    'cantidad_texto' => $quantityText,
+                    'cantidad_numero' => $quantityNumber,
+                    'unidad' => $unit,
+                    'unidad_slug' => normalizeUnitSlug($unit),
+                    'confianza' => $confidence,
+                ];
+            }
+        }
+    }
+
+    if (!$products) {
+        $productNames = aiList($data['producto_solicitado'] ?? $data['producto'] ?? '');
+        $quantities = aiList($data['cantidad'] ?? '');
+        $max = max(count($productNames), count($quantities));
+        for ($i = 0; $i < $max; $i++) {
+            [$quantityText, $quantityNumber, $unit] = parseQuantityValue($quantities[$i] ?? '');
+            $products[] = [
+                'producto' => $productNames[$i] ?? '',
+                'cantidad_texto' => $quantityText,
+                'cantidad_numero' => $quantityNumber,
+                'unidad' => $unit,
+                'unidad_slug' => normalizeUnitSlug($unit),
+                'confianza' => null,
+            ];
+        }
+    }
+
+    return array_values(array_filter($products, static function (array $item): bool {
+        return trim((string)$item['producto']) !== '' || trim((string)$item['cantidad_texto']) !== '';
+    }));
+}
+
+function normalizeAiDateValue($value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+        return $value;
+    }
+    $ts = strtotime($value);
+    return $ts ? date('Y-m-d', $ts) : '';
+}
+
+function normalizeAiTimeValue($value): string
+{
+    $value = trim((string)$value);
+    if ($value === '') return '';
+    if (preg_match('/^([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $value, $m)) {
+        return sprintf('%02d:%02d:%02d', (int)$m[1], (int)$m[2], isset($m[3]) ? (int)$m[3] : 0);
+    }
+    $ts = strtotime($value);
+    return $ts ? date('H:i:s', $ts) : '';
+}
+
+function spanishWeekdayIndex(string $text): ?int
+{
+    $key = aiSearchKey($text);
+    $days = [
+        'LUNES' => 1,
+        'MARTES' => 2,
+        'MIERCOLES' => 3,
+        'JUEVES' => 4,
+        'VIERNES' => 5,
+        'SABADO' => 6,
+        'DOMINGO' => 7,
+    ];
+    foreach ($days as $day => $idx) {
+        if (preg_match('/\b' . preg_quote($day, '/') . '\b/', $key)) {
+            return $idx;
+        }
+    }
+    return null;
+}
+
+function resolveSpanishRelativeDate(string $text, ?string $baseDate = null): string
+{
+    $text = trim($text);
+    if ($text === '') return '';
+
+    $baseTs = $baseDate ? strtotime($baseDate) : time();
+    if (!$baseTs) $baseTs = time();
+    $base = new DateTimeImmutable(date('Y-m-d', $baseTs));
+    $key = aiSearchKey($text);
+
+    if (preg_match('/\bHOY\b/', $key)) {
+        return $base->format('Y-m-d');
+    }
+    if (preg_match('/\bPASADO MANANA\b/', $key)) {
+        return $base->modify('+2 days')->format('Y-m-d');
+    }
+    if (preg_match('/\bMANANA\b/', $key)) {
+        return $base->modify('+1 day')->format('Y-m-d');
+    }
+
+    $weekday = spanishWeekdayIndex($text);
+    if ($weekday !== null) {
+        $baseWeekday = (int)$base->format('N');
+        $delta = $weekday - $baseWeekday;
+        if (preg_match('/\b(PROXIMA|PROXIMO|SIGUIENTE)\b/', $key)) {
+            if ($delta <= 0) $delta += 7;
+        } elseif (!preg_match('/\bESTA SEMANA\b/', $key) && $delta < 0) {
+            $delta += 7;
+        }
+        return $base->modify(($delta >= 0 ? '+' : '') . $delta . ' days')->format('Y-m-d');
+    }
+
+    return '';
+}
+
+function isRelativeDeliveryText(string $text): bool
+{
+    $key = aiSearchKey($text);
+    return (bool)preg_match('/\b(ESTA SEMANA|HOY|MANANA|PASADO MANANA|LUNES|MARTES|MIERCOLES|JUEVES|VIERNES|SABADO|DOMINGO|PROXIMA|PROXIMO|SIGUIENTE)\b/', $key);
+}
+
+function normalizeAiDelivery(array $data, ?string $baseDate = null): array
+{
+    $delivery = $data['fecha_entrega'] ?? $data['fecha_de_entrega'] ?? $data['entrega'] ?? [];
+    if (is_array($delivery)) {
+        $text = aiText($delivery['texto_original'] ?? $delivery['texto'] ?? '');
+        $date = normalizeAiDateValue($delivery['fecha'] ?? $delivery['fecha_normalizada'] ?? $delivery['date'] ?? '');
+        $time = normalizeAiTimeValue($delivery['hora'] ?? $delivery['hora_normalizada'] ?? $delivery['time'] ?? '');
+        $type = aiText($delivery['tipo'] ?? $delivery['type'] ?? '');
+    } else {
+        $text = aiText($delivery);
+        $date = normalizeAiDateValue($delivery);
+        $time = normalizeAiTimeValue('');
+        $type = '';
+    }
+    if ($date === '' && $text !== '') {
+        $date = resolveSpanishRelativeDate($text, $baseDate);
+    }
+    if ($date !== '' && $type === '' && isRelativeDeliveryText($text)) {
+        $type = 'fecha_relativa';
+    }
+    $typeKey = aiSearchKey($type);
+    if (!in_array($typeKey, ['FECHA EXACTA', 'FECHA RELATIVA', 'VENTANA', 'SIN FECHA'], true)) {
+        if ($date !== '' && preg_match('/\b(esta semana|manana|mañana|hoy|viernes|lunes|martes|miercoles|miércoles|jueves|sabado|sábado|domingo)\b/i', $text)) {
+            $type = 'fecha_relativa';
+        } elseif ($date !== '') {
+            $type = 'fecha_exacta';
+        } else {
+            $type = 'sin_fecha';
+        }
+    } else {
+        $type = strtolower(str_replace(' ', '_', $typeKey));
+    }
+    return [
+        'tipo' => $type,
+        'texto_original' => $text,
+        'fecha' => $date,
+        'hora' => $time,
+    ];
+}
+
+function normalizeAiExtraction(array $data, ?string $baseDate = null): array
+{
+    $confidence = normalizeAiConfidence($data['nivel_confianza'] ?? $data['confianza_global'] ?? $data['confianza'] ?? $data['confidence'] ?? null);
+    $isOrder = $data['es_pedido'] ?? $data['is_order'] ?? null;
+    if (is_string($isOrder)) {
+        $isOrder = in_array(mb_strtolower($isOrder), ['si', 'sÃ­', 'true', '1', 'yes'], true);
+    } elseif ($isOrder !== null) {
+        $isOrder = (bool)$isOrder;
+    }
+
+    $products = normalizeAiProducts($data);
+    $firstProduct = $products[0] ?? ['producto' => '', 'cantidad_texto' => ''];
+    $delivery = normalizeAiDelivery($data, $baseDate);
+    $fieldConfidence = $data['confianza_campos'] ?? $data['field_confidence'] ?? [];
+    if (!is_array($fieldConfidence)) $fieldConfidence = [];
+    $alerts = aiList($data['alertas'] ?? $data['riesgos'] ?? []);
+    foreach (aiList($data['faltantes'] ?? []) as $missing) {
+        $alerts[] = 'Falta: ' . $missing;
+    }
+    $alerts = uniqueAiAlerts($alerts);
+
+    return [
+        'producto_solicitado' => aiText($firstProduct['producto'] ?? ''),
+        'cantidad' => aiText($firstProduct['cantidad_texto'] ?? ''),
+        'fecha_entrega' => $delivery['texto_original'] ?: $delivery['fecha'],
+        'fecha_entrega_fecha' => $delivery['fecha'],
+        'fecha_entrega_hora' => $delivery['hora'],
+        'fecha_entrega_tipo' => $delivery['tipo'],
+        'cliente' => aiText(is_array($data['cliente'] ?? null) ? (($data['cliente']['nombre'] ?? '') ?: $data['cliente']) : ($data['cliente'] ?? '')),
+        'observaciones' => aiText($data['observaciones'] ?? $data['notas'] ?? ''),
+        'nivel_confianza' => $confidence,
+        'es_pedido' => $isOrder,
+        'categoria' => aiText($data['categoria'] ?? $data['category'] ?? ''),
+        'estado_ia' => aiText($data['estado_ia'] ?? $data['estado'] ?? $data['processing_status'] ?? ''),
+        'alertas' => $alerts,
+        'confianza_campos' => $fieldConfidence,
+        'productos' => $products,
+    ];
+}
+
+function aiSearchKey(string $value): string
+{
+    $plain = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+    if (is_string($plain) && $plain !== '') {
+        $value = $plain;
+    }
+    $value = mb_strtoupper(trim($value));
+    $value = strtr($value, ['Á'=>'A','É'=>'E','Í'=>'I','Ó'=>'O','Ú'=>'U','Ü'=>'U','Ñ'=>'N']);
+    $value = preg_replace('/[^A-Z0-9]+/', ' ', $value) ?? $value;
+    return trim(preg_replace('/\s+/', ' ', $value) ?? $value);
+}
+
+function scoreProductMatch(string $needle, array $product): int
+{
+    $needleKey = aiSearchKey($needle);
+    if ($needleKey === '') return 0;
+    $haystack = aiSearchKey(($product['codigo'] ?? '') . ' ' . ($product['nombre'] ?? ''));
+    if ($haystack === '') return 0;
+    if ($needleKey === aiSearchKey((string)($product['codigo'] ?? '')) || $needleKey === aiSearchKey((string)($product['nombre'] ?? ''))) {
+        return 100;
+    }
+    if (strpos($haystack, $needleKey) !== false || strpos($needleKey, $haystack) !== false) {
+        return 88;
+    }
+    $needleTokens = array_values(array_filter(explode(' ', $needleKey), static fn($t) => strlen($t) >= 2));
+    if (!$needleTokens) return 0;
+    $hits = 0;
+    foreach ($needleTokens as $token) {
+        if (strpos($haystack, $token) !== false) $hits++;
+    }
+    $coverage = $hits / max(1, count($needleTokens));
+    return (int)round($coverage * 82);
+}
+
+function bestProductMatch(array $catalog, string $requested): ?array
+{
+    $best = null;
+    $bestScore = 0;
+    foreach ($catalog as $product) {
+        $score = scoreProductMatch($requested, $product);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $best = $product;
+        }
+    }
+    if (!$best || $bestScore < 45) return null;
+    $best['match_score'] = $bestScore;
+    return $best;
+}
+
+function checkAiStock(PDO $pdo, array $products): array
+{
+    $catalog = $pdo->query("
+        SELECT id, codigo, nombre, stock, unidad_medida, activo
+        FROM productos
+        WHERE activo = 1
+        ORDER BY nombre ASC
+    ")->fetchAll();
+
+    $items = [];
+    $covered = 0;
+    $partial = 0;
+    $missing = 0;
+    $unknown = 0;
+
+    foreach ($products as $item) {
+        $requested = aiText($item['producto'] ?? '');
+        $qty = $item['cantidad_numero'] ?? null;
+        if ($qty === null) {
+            [, $qty] = parseQuantityValue($item['cantidad_texto'] ?? '');
+        }
+        $match = bestProductMatch($catalog, $requested);
+        $stock = $match ? (float)$match['stock'] : null;
+        $status = 'producto_no_encontrado';
+        if ($match && $qty === null) {
+            $status = 'cantidad_faltante';
+            $unknown++;
+        } elseif ($match && $stock <= 0) {
+            $status = 'sin_stock';
+            $partial++;
+        } elseif ($match && $stock >= (float)$qty) {
+            $status = 'cubre_completo';
+            $covered++;
+        } elseif ($match) {
+            $status = 'parcial';
+            $partial++;
+        } else {
+            $missing++;
+        }
+
+        $items[] = [
+            'producto_solicitado' => $requested,
+            'cantidad_solicitada' => $qty,
+            'cantidad_texto' => aiText($item['cantidad_texto'] ?? ''),
+            'unidad_solicitada' => aiText($item['unidad'] ?? ''),
+            'unidad_slug' => aiText($item['unidad_slug'] ?? normalizeUnitSlug(aiText($item['unidad'] ?? ''))),
+            'status' => $status,
+            'producto_id' => $match['id'] ?? null,
+            'producto_catalogo' => $match['nombre'] ?? '',
+            'codigo' => $match['codigo'] ?? '',
+            'stock_disponible' => $stock,
+            'unidad_stock' => $match['unidad_medida'] ?? '',
+            'faltante' => ($match && $qty !== null) ? max(0, (float)$qty - $stock) : null,
+            'match_score' => $match['match_score'] ?? 0,
+        ];
+    }
+
+    $overall = 'sin_productos';
+    if ($products) {
+        if ($missing > 0 || $partial > 0) $overall = 'no_cubre_completo';
+        elseif ($unknown > 0) $overall = 'requiere_cantidad';
+        else $overall = 'cubre_completo';
+    }
+
+    return [
+        'estado' => $overall,
+        'total_productos' => count($products),
+        'cubiertos' => $covered,
+        'parciales' => $partial,
+        'no_encontrados' => $missing,
+        'cantidad_desconocida' => $unknown,
+        'items' => $items,
+    ];
+}
+
+function localAiConfidence(array $data, array $stock): float
+{
+    $score = 35.0;
+    if (($data['es_pedido'] ?? null) === true) $score += 15;
+    if (trim((string)($data['cliente'] ?? '')) !== '') $score += 10;
+    if (!empty($data['productos'])) $score += 15;
+    $allProductsHaveQty = true;
+    foreach (($data['productos'] ?? []) as $product) {
+        $hasName = trim((string)($product['producto'] ?? '')) !== '';
+        $hasQty = ($product['cantidad_numero'] ?? null) !== null || trim((string)($product['cantidad_texto'] ?? '')) !== '';
+        if (!$hasName || !$hasQty) {
+            $allProductsHaveQty = false;
+            break;
+        }
+    }
+    if ($allProductsHaveQty && !empty($data['productos'])) $score += 10;
+    if (trim((string)($data['fecha_entrega'] ?? '')) !== '') $score += 6;
+    if (($stock['estado'] ?? '') === 'cubre_completo') $score += 12;
+    if (($stock['estado'] ?? '') === 'no_cubre_completo') $score -= 15;
+    if (preg_match('/\b(esta semana|manana|mañana|hoy|viernes|lunes|martes|miercoles|miércoles|jueves|sabado|sábado|domingo)\b/i', (string)($data['fecha_entrega'] ?? ''))) {
+        $score -= 6;
+    }
+    return max(0, min(100, $score));
+}
+
+function reconcileAiExtractionWithStock(array $data, array $stock): array
+{
+    $hasProducts = !empty($data['productos']);
+    $hasCustomer = trim((string)($data['cliente'] ?? '')) !== '';
+    $hasQuantities = true;
+    foreach (($data['productos'] ?? []) as $product) {
+        if (($product['cantidad_numero'] ?? null) === null && trim((string)($product['cantidad_texto'] ?? '')) === '') {
+            $hasQuantities = false;
+            break;
+        }
+    }
+    $allProductsMatched = true;
+    foreach (($stock['items'] ?? []) as $stockItem) {
+        $status = (string)($stockItem['status'] ?? '');
+        $matchScore = (int)($stockItem['match_score'] ?? 0);
+        if (!in_array($status, ['cubre_completo', 'cantidad_faltante'], true) || $matchScore < 70) {
+            $allProductsMatched = false;
+            break;
+        }
+    }
+
+    $alerts = uniqueAiAlerts($data['alertas'] ?? []);
+    $stockCovers = ($stock['estado'] ?? '') === 'cubre_completo';
+    if ($stockCovers) {
+        $alerts = array_values(array_filter($alerts, static function ($alert) use ($hasQuantities, $allProductsMatched) {
+            $alert = (string)$alert;
+            if (alertIsStockConfirmation($alert)) return false;
+            if ($hasQuantities && alertIsMissingQuantity($alert)) return false;
+            if ($allProductsMatched && alertIsProductAmbiguous($alert)) return false;
+            return true;
+        }));
+        $obs = trim((string)($data['observaciones'] ?? ''));
+        if ($obs === '') {
+            $data['observaciones'] = 'Existencia completa validada contra inventario.';
+        } elseif (stripos(aiSearchKey($obs), 'EXISTENCIA') === false) {
+            $data['observaciones'] = $obs . "\nExistencia completa validada contra inventario.";
+        }
+    }
+
+    if (($data['es_pedido'] ?? null) === true && $hasProducts && $hasCustomer && $hasQuantities) {
+        $data['estado_ia'] = $stockCovers ? 'listo_para_capturar' : 'requiere_revision';
+    } elseif (($data['es_pedido'] ?? null) === true) {
+        $data['estado_ia'] = 'incompleto';
+    }
+
+    if (($data['nivel_confianza'] ?? null) === null || (float)$data['nivel_confianza'] <= 1) {
+        $data['nivel_confianza'] = localAiConfidence($data, $stock);
+    }
+    $data['nivel_confianza'] = max(1, min(100, (float)$data['nivel_confianza']));
+
+    $data['alertas'] = $alerts;
+    return $data;
+}
+
+function saveAiItemRows(PDO $pdo, int $emailId, array $stock): void
+{
+    $pdo->prepare("DELETE FROM email_inbox_ai_items WHERE email_id = ?")->execute([$emailId]);
+    $items = is_array($stock['items'] ?? null) ? $stock['items'] : [];
+    if (!$items) return;
+
+    $ins = $pdo->prepare("
+        INSERT INTO email_inbox_ai_items
+            (email_id, line_index, product_text, product_id, product_code, product_name,
+             quantity_value, unit_slug, unit_text, stock_available, stock_missing, stock_status, match_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ");
+
+    foreach ($items as $idx => $item) {
+        $ins->execute([
+            $emailId,
+            $idx + 1,
+            mb_substr((string)($item['producto_solicitado'] ?? ''), 0, 255),
+            !empty($item['producto_id']) ? (int)$item['producto_id'] : null,
+            ($item['codigo'] ?? '') !== '' ? mb_substr((string)$item['codigo'], 0, 80) : null,
+            ($item['producto_catalogo'] ?? '') !== '' ? mb_substr((string)$item['producto_catalogo'], 0, 255) : null,
+            ($item['cantidad_solicitada'] ?? null) !== null ? (float)$item['cantidad_solicitada'] : null,
+            mb_substr((string)($item['unidad_slug'] ?? 'otro'), 0, 40),
+            ($item['unidad_solicitada'] ?? '') !== '' ? mb_substr((string)$item['unidad_solicitada'], 0, 80) : null,
+            ($item['stock_disponible'] ?? null) !== null ? (float)$item['stock_disponible'] : null,
+            ($item['faltante'] ?? null) !== null ? (float)$item['faltante'] : null,
+            mb_substr((string)($item['status'] ?? 'producto_no_encontrado'), 0, 40),
+            (int)($item['match_score'] ?? 0),
+        ]);
+    }
+}
+
 function ollamaEndpointParts(): array
 {
     $parts = parse_url(defined('OLLAMA_BASE_URL') ? OLLAMA_BASE_URL : 'http://localhost:11434');
@@ -330,6 +1142,21 @@ function ollamaEndpointParts(): array
         $host = '127.0.0.1';
     }
     return [$host, $port];
+}
+
+function ollamaHttpBaseUrl(): string
+{
+    $base = defined('OLLAMA_BASE_URL') ? OLLAMA_BASE_URL : 'http://localhost:11434';
+    $parts = parse_url($base);
+    if (!is_array($parts)) return rtrim($base, '/');
+    $scheme = $parts['scheme'] ?? 'http';
+    $host = $parts['host'] ?? '127.0.0.1';
+    if ($host === 'localhost') {
+        $host = '127.0.0.1';
+    }
+    $port = isset($parts['port']) ? ':' . (int)$parts['port'] : '';
+    $path = isset($parts['path']) ? rtrim($parts['path'], '/') : '';
+    return $scheme . '://' . $host . $port . $path;
 }
 
 function isOllamaRunning(): bool
@@ -402,6 +1229,8 @@ function startOllamaFromProject(bool $waitForReady = false): bool
 
 function analyzeMailWithOllama(array $mail): array
 {
+    @set_time_limit(90);
+
     if (!defined('OLLAMA_BASE_URL') || OLLAMA_BASE_URL === '') {
         throw new RuntimeException('Falta configurar OLLAMA_BASE_URL.');
     }
@@ -415,23 +1244,36 @@ function analyzeMailWithOllama(array $mail): array
     }
 
     $systemPrompt = implode("\n", [
-        'Eres un extractor local para pedidos de alimentos o insumos.',
-        'Tu unica tarea es leer correos y regresar JSON estricto.',
-        'No inventes datos. Si falta informacion usa null o cadena vacia.',
+        'Eres un extractor local para pedidos de alimentos, medicamentos o insumos veterinarios.',
+        'Tu unica tarea es leer correos y regresar JSON estricto, sin Markdown.',
+        'No inventes datos. Si falta informacion usa null, cadena vacia o arreglo vacio.',
         'No ejecutes acciones, no descuentes inventario y no crees pedidos.',
+        'No decidas inventario ni existencia. El sistema empatara contra catalogo y validara stock despues.',
         'El humano administrador validara todo antes de avanzar.',
-        'Responde solo con JSON usando estas llaves:',
-        'producto_solicitado, cantidad, fecha_entrega, cliente, observaciones, nivel_confianza, es_pedido.',
-        'Nunca omitas ninguna llave. Si falta un dato usa cadena vacia, null o false segun corresponda.',
-        'cantidad debe conservar la unidad si aparece en el correo, por ejemplo "40 piezas" o "20 toneladas".',
+        'Clasifica el correo en una de estas categorias: pedido_compra, cotizacion, consulta_inventario, seguimiento, confirmacion_pago, queja, otro.',
+        'Define estado_ia como: listo_para_capturar, requiere_revision, incompleto, no_es_pedido.',
+        'productos siempre debe ser un arreglo y debe conservar el orden del correo.',
+        'Cada producto debe tener exactamente estas claves: producto, cantidad, unidad, confianza.',
+        'producto debe ser solo el nombre/codigo solicitado, sin incluir la palabra Producto, sin incluir cantidad y sin inventar codigo.',
+        'cantidad debe ser numerica si aparece. Si el correo dice "Cantidad: 15 piezas", cantidad debe ser 15 y unidad debe ser piezas.',
+        'unidad debe normalizarse a una de estas opciones si aplica: piezas, kg, toneladas, cajas, bultos, litros, otro.',
+        'Incluye confianza_campos con claves cliente, productos, cantidades, entrega, categoria; cada una de 0 a 100.',
+        'nivel_confianza debe ser global de 0 a 100 y penalizar solo datos faltantes, no la necesidad de validar inventario.',
+        'entrega debe ser objeto con texto_original, tipo, fecha y hora. tipo solo puede ser fecha_exacta, fecha_relativa, ventana o sin_fecha.',
+        'fecha usa YYYY-MM-DD o null; hora usa HH:MM:SS o null.',
+        'Si el correo dice una fecha relativa como "viernes de esta semana", calcula fecha usando Fecha correo y Fecha actual del sistema. Si no hay hora, usa null.',
+        'Para "esta semana", usa la semana calendario de la Fecha correo. Ejemplo: si Fecha correo es lunes y dice viernes de esta semana, fecha es el viernes de esa misma semana.',
+        'alertas debe incluir solo faltantes reales del texto: faltan cantidades, producto ambiguo, fecha no interpretable o correo no pedido.',
+        'No agregues alertas de confirmar existencia ni stock; eso lo calcula el sistema.',
         'observaciones debe resumir notas operativas como confirmar disponibilidad, factura, flete, horarios o urgencia.',
-        'nivel_confianza es obligatorio y debe ser un numero de 0 a 100.',
-        'fecha_entrega debe normalizarse como YYYY-MM-DD cuando sea posible; si no es clara, conserva el texto original.',
+        'Nunca regreses producto_solicitado o cantidad como arreglos planos; usa productos.',
+        'Formato exacto esperado: {"categoria":"","estado_ia":"","es_pedido":true,"cliente":{"nombre":"","confianza":0},"productos":[{"producto":"","cantidad":0,"unidad":"","confianza":0}],"entrega":{"texto_original":"","tipo":"sin_fecha","fecha":null,"hora":null,"confianza":0},"observaciones":"","alertas":[],"faltantes":[],"confianza_campos":{"cliente":0,"productos":0,"cantidades":0,"entrega":0,"categoria":0},"nivel_confianza":0}',
     ]);
 
     $userPrompt = "Asunto: " . (string)($mail['subject'] ?? '') . "\n"
         . "Remitente: " . (string)($mail['from_name'] ?: $mail['from_email'] ?: '') . "\n"
         . "Fecha correo: " . (string)($mail['received_at'] ?: $mail['fetched_at'] ?: '') . "\n\n"
+        . "Fecha actual del sistema: " . date('Y-m-d') . "\n\n"
         . "Cuerpo del correo:\n" . $body;
 
     $payload = [
@@ -440,6 +1282,8 @@ function analyzeMailWithOllama(array $mail): array
         'format' => 'json',
         'options' => [
             'temperature' => 0.1,
+            'num_predict' => 700,
+            'num_ctx' => 4096,
         ],
         'messages' => [
             ['role' => 'system', 'content' => $systemPrompt],
@@ -447,20 +1291,27 @@ function analyzeMailWithOllama(array $mail): array
         ],
     ];
 
-    $url = OLLAMA_BASE_URL . '/api/chat';
+    $bodyJson = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($bodyJson === false) {
+        throw new RuntimeException('No se pudo preparar la solicitud JSON para Ollama.');
+    }
+
+    $url = ollamaHttpBaseUrl() . '/api/chat';
     $context = stream_context_create([
         'http' => [
             'method' => 'POST',
-            'header' => "Content-Type: application/json\r\n",
-            'content' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'timeout' => 90,
+            'header' => "Content-Type: application/json\r\nContent-Length: " . strlen($bodyJson) . "\r\nConnection: close\r\n",
+            'content' => $bodyJson,
+            'timeout' => 55,
             'ignore_errors' => true,
         ],
     ]);
 
     $raw = @file_get_contents($url, false, $context);
     if ($raw === false) {
-        throw new RuntimeException('No se pudo conectar con Ollama en ' . OLLAMA_BASE_URL . '. Verifica que este corriendo y que el modelo este descargado.');
+        $last = error_get_last();
+        $detail = is_array($last) && !empty($last['message']) ? ' Detalle: ' . $last['message'] : '';
+        throw new RuntimeException('Ollama tardo demasiado o no respondio en ' . ollamaHttpBaseUrl() . '. Intenta de nuevo con un correo mas corto o reinicia Ollama.' . $detail);
     }
 
     $response = json_decode($raw, true);
@@ -477,41 +1328,563 @@ function analyzeMailWithOllama(array $mail): array
     }
 
     $json = extractJsonObjectFromText($content);
-    $normalized = normalizeAiExtraction($json);
+    $normalized = normalizeAiExtraction($json, (string)($mail['received_at'] ?: $mail['fetched_at'] ?: ''));
+    $normalized = enrichAiExtractionFromMailText($normalized, $body);
     $normalized['raw_json'] = json_encode($json, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return $normalized;
 }
 
 function saveAiExtraction(PDO $pdo, int $id, array $data): void
 {
+    $stock = checkAiStock($pdo, $data['productos'] ?? []);
+    $data = reconcileAiExtractionWithStock($data, $stock);
     $confidence = $data['nivel_confianza'];
     $isOrder = $data['es_pedido'];
+    $raw = $data;
+    $raw['stock'] = $stock;
 
     $pdo->prepare("
         UPDATE email_inbox_messages
         SET ai_product = ?,
             ai_quantity = ?,
             ai_delivery_date = ?,
+            ai_delivery_date_value = ?,
+            ai_delivery_time_value = ?,
+            ai_delivery_type = ?,
             ai_customer = ?,
             ai_observations = ?,
             ai_confidence = ?,
             ai_is_order = ?,
             ai_model = ?,
             ai_raw_json = ?,
+            ai_category = ?,
+            ai_processing_status = ?,
+            ai_alerts = ?,
+            ai_stock_json = ?,
             ai_extracted_at = NOW()
         WHERE id = ?
     ")->execute([
         $data['producto_solicitado'] !== '' ? mb_substr($data['producto_solicitado'], 0, 255) : null,
         $data['cantidad'] !== '' ? mb_substr($data['cantidad'], 0, 120) : null,
         $data['fecha_entrega'] !== '' ? mb_substr($data['fecha_entrega'], 0, 120) : null,
+        ($data['fecha_entrega_fecha'] ?? '') !== '' ? $data['fecha_entrega_fecha'] : null,
+        ($data['fecha_entrega_hora'] ?? '') !== '' ? $data['fecha_entrega_hora'] : null,
+        ($data['fecha_entrega_tipo'] ?? '') !== '' ? mb_substr((string)$data['fecha_entrega_tipo'], 0, 40) : null,
         $data['cliente'] !== '' ? mb_substr($data['cliente'], 0, 255) : null,
         $data['observaciones'] !== '' ? mb_substr($data['observaciones'], 0, 2500) : null,
         $confidence !== null ? round((float)$confidence, 2) : null,
         $isOrder === null ? null : ($isOrder ? 1 : 0),
         OLLAMA_MODEL,
-        $data['raw_json'] ?? json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        $data['categoria'] !== '' ? mb_substr((string)$data['categoria'], 0, 80) : null,
+        $data['estado_ia'] !== '' ? mb_substr((string)$data['estado_ia'], 0, 80) : null,
+        !empty($data['alertas']) ? mb_substr(implode("\n", $data['alertas']), 0, 2500) : null,
+        json_encode($stock, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         $id,
     ]);
+    saveAiItemRows($pdo, $id, $stock);
+}
+
+function emailInboxSmtpAccount(PDO $pdo, array $mail): array
+{
+    $sourceEmail = '';
+    $sourceMailbox = (string)($mail['source_mailbox'] ?? '');
+    if (preg_match('/^([^:]+):/', $sourceMailbox, $m)) {
+        $sourceEmail = trim((string)$m[1]);
+    }
+
+    if ($sourceEmail !== '') {
+        $st = $pdo->prepare("
+            SELECT * FROM mail_accounts
+            WHERE is_active = 1
+              AND LOWER(email) = LOWER(?)
+              AND COALESCE(smtp_host, '') <> ''
+              AND COALESCE(smtp_user, '') <> ''
+              AND COALESCE(smtp_pass, '') <> ''
+            LIMIT 1
+        ");
+        $st->execute([$sourceEmail]);
+        $account = $st->fetch();
+        if ($account) return $account;
+    }
+
+    $st = $pdo->query("
+        SELECT * FROM mail_accounts
+        WHERE is_active = 1
+          AND COALESCE(smtp_host, '') <> ''
+          AND COALESCE(smtp_user, '') <> ''
+          AND COALESCE(smtp_pass, '') <> ''
+        ORDER BY id ASC
+        LIMIT 1
+    ");
+    $account = $st->fetch();
+    if (!$account) {
+        throw new RuntimeException('No hay cuenta SMTP activa para enviar la confirmacion.');
+    }
+    return $account;
+}
+
+function smtpReadLine($socket): string
+{
+    $line = fgets($socket, 2048);
+    return $line === false ? '' : rtrim($line, "\r\n");
+}
+
+function smtpReadResponse($socket): string
+{
+    $response = '';
+    do {
+        $line = smtpReadLine($socket);
+        if ($line === '') break;
+        $response .= ($response !== '' ? "\n" : '') . $line;
+    } while (isset($line[3]) && $line[3] === '-');
+    return $response;
+}
+
+function smtpExpect($socket, array $codes, string $context): string
+{
+    $response = smtpReadResponse($socket);
+    $code = substr($response, 0, 3);
+    if (!in_array($code, $codes, true)) {
+        throw new RuntimeException($context . ': ' . $response);
+    }
+    return $response;
+}
+
+function smtpCommand($socket, string $command, array $codes, string $context): string
+{
+    fwrite($socket, $command . "\r\n");
+    return smtpExpect($socket, $codes, $context);
+}
+
+function smtpSafeMessageBody(string $body): string
+{
+    $body = smtpNormalizeLineEndings($body);
+    return preg_replace('/(^|\r\n)\./', '$1..', $body) ?? $body;
+}
+
+function smtpNormalizeLineEndings(string $value): string
+{
+    return str_replace("\n", "\r\n", str_replace(["\r\n", "\r"], "\n", $value));
+}
+
+function smtpBase64MessageBody(string $body): string
+{
+    $body = str_replace(["\r\n", "\r"], "\n", $body);
+    return rtrim(chunk_split(base64_encode($body), 76, "\r\n"));
+}
+
+function smtpEncodedHeader(string $value): string
+{
+    $value = trim(preg_replace('/[\r\n]+/', ' ', $value) ?? $value);
+    if ($value === '') return '';
+
+    if (function_exists('mb_encode_mimeheader')) {
+        $encoded = mb_encode_mimeheader($value, 'UTF-8', 'B', "\r\n");
+        return str_replace("\r\n ", "\r\n\t", $encoded);
+    }
+
+    $chunks = str_split(base64_encode($value), 48);
+    return implode("\r\n\t", array_map(static fn($chunk) => '=?UTF-8?B?' . $chunk . '?=', $chunks));
+}
+
+function smtpFoldHeader(string $name, string $value, int $limit = 76): string
+{
+    $value = trim(preg_replace('/[\r\n]+/', ' ', $value) ?? $value);
+    $line = $name . ': ' . $value;
+    if (strlen($line) <= $limit) return $line;
+
+    $folded = $name . ':';
+    $current = '';
+    foreach (preg_split('/\s+/', $value) ?: [] as $word) {
+        if ($word === '') continue;
+        if ($current !== '' && strlen($current . ' ' . $word) > $limit - 1) {
+            $folded .= "\r\n\t" . $current;
+            $current = $word;
+        } else {
+            $current = $current === '' ? $word : $current . ' ' . $word;
+        }
+    }
+    if ($current !== '') {
+        $folded .= "\r\n\t" . $current;
+    }
+    return $folded;
+}
+
+function smtpAssertTransportLineLengths(string $message): void
+{
+    foreach (explode("\r\n", smtpNormalizeLineEndings($message)) as $idx => $line) {
+        if (strlen($line) > 998) {
+            throw new RuntimeException('El correo genero una linea demasiado larga para SMTP en la linea ' . ($idx + 1) . ' (' . strlen($line) . ' bytes).');
+        }
+    }
+}
+
+function smtpSendMail(array $account, string $to, string $subject, string $textBody, ?string $htmlBody = null): void
+{
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('El remitente del correo no tiene email valido para responder.');
+    }
+
+    $host = trim((string)($account['smtp_host'] ?? ''));
+    $port = (int)($account['smtp_port'] ?? 0);
+    $secure = strtolower(trim((string)($account['smtp_secure'] ?? 'ssl')));
+    $user = trim((string)($account['smtp_user'] ?? ''));
+    $pass = (string)($account['smtp_pass'] ?? '');
+    $from = trim((string)($account['email'] ?? $user));
+    if ($host === '' || $port <= 0 || $user === '' || $pass === '' || !filter_var($from, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('La cuenta SMTP esta incompleta.');
+    }
+
+    $target = ($secure === 'ssl' ? 'ssl://' : '') . $host . ':' . $port;
+    $socket = @stream_socket_client($target, $errno, $errstr, 20, STREAM_CLIENT_CONNECT);
+    if (!$socket) {
+        throw new RuntimeException('No se pudo conectar al SMTP: ' . $errstr);
+    }
+    stream_set_timeout($socket, 20);
+
+    try {
+        smtpExpect($socket, ['220'], 'SMTP saludo');
+        smtpCommand($socket, 'EHLO nexuspanel.local', ['250'], 'SMTP EHLO');
+        if ($secure === 'tls') {
+            smtpCommand($socket, 'STARTTLS', ['220'], 'SMTP STARTTLS');
+            if (!stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                throw new RuntimeException('No se pudo activar TLS para SMTP.');
+            }
+            smtpCommand($socket, 'EHLO nexuspanel.local', ['250'], 'SMTP EHLO TLS');
+        }
+        smtpCommand($socket, 'AUTH LOGIN', ['334'], 'SMTP AUTH');
+        smtpCommand($socket, base64_encode($user), ['334'], 'SMTP usuario');
+        smtpCommand($socket, base64_encode($pass), ['235'], 'SMTP password');
+        smtpCommand($socket, 'MAIL FROM:<' . $from . '>', ['250'], 'SMTP remitente');
+        smtpCommand($socket, 'RCPT TO:<' . $to . '>', ['250', '251'], 'SMTP destinatario');
+        smtpCommand($socket, 'DATA', ['354'], 'SMTP DATA');
+
+        $boundary = 'nexus_' . bin2hex(random_bytes(12));
+        $headers = [
+            smtpFoldHeader('From', 'NexusPanel <' . $from . '>'),
+            smtpFoldHeader('To', '<' . $to . '>'),
+            'Subject: ' . smtpEncodedHeader($subject),
+            'MIME-Version: 1.0',
+            'Date: ' . date(DATE_RFC2822),
+        ];
+        if ($htmlBody !== null && trim($htmlBody) !== '') {
+            $headers[] = 'Content-Type: multipart/alternative; boundary="' . $boundary . '"';
+            $message = implode("\r\n", $headers)
+                . "\r\n\r\n--{$boundary}\r\n"
+                . "Content-Type: text/plain; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: base64\r\n\r\n"
+                . smtpBase64MessageBody($textBody)
+                . "\r\n\r\n--{$boundary}\r\n"
+                . "Content-Type: text/html; charset=UTF-8\r\n"
+                . "Content-Transfer-Encoding: base64\r\n\r\n"
+                . smtpBase64MessageBody($htmlBody)
+                . "\r\n\r\n--{$boundary}--";
+        } else {
+            $headers[] = 'Content-Type: text/plain; charset=UTF-8';
+            $headers[] = 'Content-Transfer-Encoding: base64';
+            $message = implode("\r\n", $headers) . "\r\n\r\n" . smtpBase64MessageBody($textBody);
+        }
+        $message = smtpNormalizeLineEndings($message);
+        smtpAssertTransportLineLengths($message);
+        $message = smtpSafeMessageBody($message);
+        fwrite($socket, $message . "\r\n.\r\n");
+        smtpExpect($socket, ['250'], 'SMTP envio');
+        @fwrite($socket, "QUIT\r\n");
+    } finally {
+        @fclose($socket);
+    }
+}
+
+function findOrCreateEmailCustomer(PDO $pdo, array $mail): int
+{
+    $email = trim((string)($mail['from_email'] ?? ''));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        throw new RuntimeException('El correo no tiene remitente valido para crear el cliente.');
+    }
+
+    $st = $pdo->prepare("SELECT id FROM usuarios WHERE LOWER(email) = LOWER(?) LIMIT 1");
+    $st->execute([$email]);
+    $existing = (int)($st->fetchColumn() ?: 0);
+    if ($existing > 0) return $existing;
+
+    $name = trim((string)($mail['ai_customer'] ?: $mail['from_name'] ?: $email));
+    $password = password_hash(bin2hex(random_bytes(16)), PASSWORD_DEFAULT);
+    $pdo->prepare("
+        INSERT INTO usuarios (nombre, email, password, rol, activo)
+        VALUES (?, ?, ?, 'cliente', 1)
+    ")->execute([
+        mb_substr($name, 0, 120),
+        mb_substr($email, 0, 180),
+        $password,
+    ]);
+    return (int)$pdo->lastInsertId();
+}
+
+function emailAiItemsForOrder(PDO $pdo, int $emailId): array
+{
+    $st = $pdo->prepare("
+        SELECT ai.*, p.precio, p.stock, p.nombre AS current_product_name, p.codigo AS current_product_code
+        FROM email_inbox_ai_items ai
+        LEFT JOIN productos p ON p.id = ai.product_id
+        WHERE ai.email_id = ?
+        ORDER BY ai.line_index ASC, ai.id ASC
+    ");
+    $st->execute([$emailId]);
+    return $st->fetchAll();
+}
+
+function buildEmailConfirmationBody(array $mail, array $items, int $pedidoId, string $folio): string
+{
+    $customer = trim((string)($mail['ai_customer'] ?: $mail['from_name'] ?: ''));
+    $delivery = trim((string)($mail['ai_delivery_date_value'] ?: $mail['ai_delivery_date'] ?: 'Por confirmar'));
+    $lines = [];
+    foreach ($items as $item) {
+        $qty = rtrim(rtrim(number_format((float)$item['quantity_value'], 3, '.', ''), '0'), '.');
+        $unit = trim((string)($item['unit_slug'] ?? ''));
+        $name = trim((string)($item['product_name'] ?: $item['current_product_name'] ?: $item['product_text']));
+        $lines[] = '- ' . $qty . ' ' . $unit . ' de ' . $name;
+    }
+
+    return trim("Buen dia" . ($customer !== '' ? " {$customer}" : '') . ".\n\n"
+        . "Confirmamos la recepcion de su pedido.\n\n"
+        . "Folio: {$folio}\n"
+        . "Productos:\n" . implode("\n", $lines) . "\n\n"
+        . "Fecha solicitada de entrega: {$delivery}\n\n"
+        . "Nuestro equipo dara seguimiento operativo y se comunicara si requiere alguna validacion adicional.\n\n"
+        . "Saludos,\nNexusPanel");
+}
+
+function buildEmailConfirmationHtml(array $mail, array $items, int $pedidoId, string $folio): string
+{
+    $customer = trim((string)($mail['ai_customer'] ?: $mail['from_name'] ?: ''));
+    $delivery = trim((string)($mail['ai_delivery_date_value'] ?: $mail['ai_delivery_date'] ?: 'Por confirmar'));
+    $safeCustomer = htmlspecialchars($customer !== '' ? $customer : 'cliente', ENT_QUOTES, 'UTF-8');
+    $safeFolio = htmlspecialchars($folio, ENT_QUOTES, 'UTF-8');
+    $safeDelivery = htmlspecialchars($delivery, ENT_QUOTES, 'UTF-8');
+
+    $rows = '';
+    foreach ($items as $item) {
+        $qty = rtrim(rtrim(number_format((float)$item['quantity_value'], 3, '.', ''), '0'), '.');
+        $unit = trim((string)($item['unit_slug'] ?? ''));
+        $name = trim((string)($item['product_name'] ?: $item['current_product_name'] ?: $item['product_text']));
+        $code = trim((string)($item['product_code'] ?: $item['current_product_code'] ?: ''));
+        $rows .= '<tr>'
+            . '<td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;color:#0f172a;font-weight:700;">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ($code !== '' ? '<div style="font-size:12px;color:#64748b;margin-top:3px;">Codigo: ' . htmlspecialchars($code, ENT_QUOTES, 'UTF-8') . '</div>' : '') . '</td>'
+            . '<td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;color:#0f172a;text-align:right;white-space:nowrap;">' . htmlspecialchars($qty . ' ' . $unit, ENT_QUOTES, 'UTF-8') . '</td>'
+            . '</tr>';
+    }
+
+    return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+        . '<body style="margin:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">'
+        . '<div style="padding:28px 16px;">'
+        . '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 18px 45px rgba(15,23,42,.12);">'
+        . '<div style="background:#082f49;padding:24px 28px;color:#ffffff;">'
+        . '<div style="font-size:13px;font-weight:700;color:#7dd3fc;text-transform:uppercase;letter-spacing:.08em;">Pedido confirmado</div>'
+        . '<h1 style="margin:8px 0 0;font-size:26px;line-height:1.2;">Gracias, ' . $safeCustomer . '</h1>'
+        . '<p style="margin:10px 0 0;color:#dbeafe;font-size:15px;line-height:1.55;">Confirmamos la recepcion de su pedido. Nuestro equipo dara seguimiento operativo y se comunicara si requiere alguna validacion adicional.</p>'
+        . '</div>'
+        . '<div style="padding:24px 28px;">'
+        . '<div style="display:block;background:#ecfeff;border:1px solid #bae6fd;border-radius:14px;padding:16px 18px;margin-bottom:20px;">'
+        . '<div style="font-size:12px;color:#0369a1;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Folio de seguimiento</div>'
+        . '<div style="font-size:28px;font-weight:800;color:#0f172a;letter-spacing:.04em;margin-top:4px;">' . $safeFolio . '</div>'
+        . '</div>'
+        . '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-bottom:20px;">'
+        . '<thead><tr><th align="left" style="background:#f8fafc;padding:12px 16px;color:#334155;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Producto</th><th align="right" style="background:#f8fafc;padding:12px 16px;color:#334155;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">Cantidad</th></tr></thead>'
+        . '<tbody>' . $rows . '</tbody></table>'
+        . '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;margin-bottom:20px;">'
+        . '<div style="font-size:12px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">Fecha solicitada de entrega</div>'
+        . '<div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px;">' . $safeDelivery . '</div>'
+        . '</div>'
+        . '<p style="margin:0;color:#475569;font-size:14px;line-height:1.6;">Si necesita hacer algun ajuste, puede responder directamente a este correo.</p>'
+        . '</div>'
+        . '<div style="background:#0f172a;color:#cbd5e1;padding:16px 28px;font-size:12px;">NexusPanel · Confirmacion automatica generada por el area operativa.</div>'
+        . '</div></div></body></html>';
+}
+
+function insertPedidoFromEmail(PDO $pdo, int $clienteId, array $mail, array $items, int $usuarioId): array
+{
+    $now = fechaMysqlAhora();
+    $folio = function_exists('generarFolioHex') ? generarFolioHex($pdo) : '';
+    $total = 0.0;
+    foreach ($items as $item) {
+        $total += (float)($item['precio'] ?? 0) * (int)$item['quantity_value'];
+    }
+
+    $cols = [];
+    $vals = [];
+    $add = static function (string $col, $val) use (&$cols, &$vals): void {
+        $cols[] = $col;
+        $vals[] = $val;
+    };
+
+    if (columnExists($pdo, 'pedidos', 'folio_hex')) $add('folio_hex', $folio);
+    $add('cliente_id', $clienteId);
+    $add('operador_id', null);
+    $add('estado', 'pendiente');
+    if (columnExists($pdo, 'pedidos', 'source_channel')) $add('source_channel', 'email_ia');
+    if (columnExists($pdo, 'pedidos', 'source_email_id')) $add('source_email_id', (int)$mail['id']);
+    if (columnExists($pdo, 'pedidos', 'source_message_id')) $add('source_message_id', mb_substr((string)($mail['message_id'] ?? ''), 0, 255));
+    if (columnExists($pdo, 'pedidos', 'tipo_pedido')) $add('tipo_pedido', 'formal');
+    $add('total', $total);
+    if (columnExists($pdo, 'pedidos', 'fecha_requerida')) {
+        $deliveryDate = trim((string)($mail['ai_delivery_date_value'] ?? ''));
+        $deliveryTime = trim((string)($mail['ai_delivery_time_value'] ?? ''));
+        $add('fecha_requerida', $deliveryDate !== '' ? ($deliveryDate . ' ' . ($deliveryTime !== '' ? $deliveryTime : '00:00:00')) : null);
+    }
+    if (columnExists($pdo, 'pedidos', 'notas')) {
+        $add('notas', mb_substr('Pedido confirmado desde correo IA #' . (int)$mail['id'] . "\n" . (string)($mail['ai_observations'] ?? ''), 0, 2500));
+    }
+    if (columnExists($pdo, 'pedidos', 'created_at')) $add('created_at', $now);
+    if (columnExists($pdo, 'pedidos', 'updated_at')) $add('updated_at', $now);
+
+    $placeholders = implode(',', array_fill(0, count($cols), '?'));
+    $pdo->prepare("INSERT INTO pedidos (" . implode(',', $cols) . ") VALUES ($placeholders)")->execute($vals);
+    $pedidoId = (int)$pdo->lastInsertId();
+    if ($folio === '') $folio = strtoupper(dechex($pedidoId));
+
+    $hasAjuste = columnExists($pdo, 'pedido_items', 'ajuste_cliente');
+    $stItem = $pdo->prepare($hasAjuste
+        ? "INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unit, ajuste_cliente) VALUES (?, ?, ?, ?, ?)"
+        : "INSERT INTO pedido_items (pedido_id, producto_id, cantidad, precio_unit) VALUES (?, ?, ?, ?)"
+    );
+    $stStock = $pdo->prepare("UPDATE productos SET stock = stock - ? WHERE id = ?");
+
+    foreach ($items as $item) {
+        $qty = (int)$item['quantity_value'];
+        $args = [$pedidoId, (int)$item['product_id'], $qty, (float)($item['precio'] ?? 0)];
+        if ($hasAjuste) $args[] = null;
+        $stItem->execute($args);
+        $stockAntes = (int)$item['stock'];
+        $stockNuevo = $stockAntes - $qty;
+        $stStock->execute([$qty, (int)$item['product_id']]);
+        registrarMovimientoInventario($pdo, (int)$item['product_id'], 'salida', $qty, $stockAntes, $stockNuevo, 'pedido', $pedidoId, 'Descuento por confirmacion de pedido desde correo IA', $usuarioId);
+    }
+
+    recalcularHistorialCliente($pdo, $clienteId);
+    registrarHistorialPedido($pdo, $pedidoId, 'pendiente', $usuarioId, 'Pedido confirmado desde correo IA');
+    registrarNotificacionEvento($pdo, $pedidoId, $clienteId, 'email', 'pedido_confirmado_email', 'Pedido confirmado desde correo IA.', 'pendiente', ['email_inbox_id' => (int)$mail['id']]);
+    registrarAuditoria($pdo, $usuarioId, nombreRolActual(), 'pedidos_email', 'confirmar_pedido_email', 'pedido', $pedidoId, 'Correo inbox #' . (int)$mail['id']);
+
+    return ['pedido_id' => $pedidoId, 'folio' => $folio, 'total' => $total];
+}
+
+function confirmEmailCandidateAsOrder(PDO $pdo, int $emailId, int $usuarioId): array
+{
+    $pdo->beginTransaction();
+    try {
+        $stMail = $pdo->prepare("SELECT * FROM email_inbox_messages WHERE id = ? FOR UPDATE");
+        $stMail->execute([$emailId]);
+        $mail = $stMail->fetch();
+        if (!$mail) throw new RuntimeException('No se encontro el correo para confirmar.');
+        if (!empty($mail['confirmed_pedido_id'])) {
+            throw new RuntimeException('Este correo ya fue confirmado como pedido #' . (int)$mail['confirmed_pedido_id'] . '.');
+        }
+        if ((int)($mail['ai_is_order'] ?? 0) !== 1) {
+            throw new RuntimeException('El correo no esta marcado como pedido.');
+        }
+
+        $items = emailAiItemsForOrder($pdo, $emailId);
+        if (!$items) throw new RuntimeException('No hay productos tipados para crear el pedido. Analiza y guarda la extraccion primero.');
+
+        foreach ($items as $idx => $item) {
+            if (empty($item['product_id'])) {
+                throw new RuntimeException('Producto ' . ($idx + 1) . ' no tiene producto_id empatado.');
+            }
+            if ((float)($item['quantity_value'] ?? 0) <= 0) {
+                throw new RuntimeException('Producto ' . ($idx + 1) . ' no tiene cantidad valida.');
+            }
+            if ((float)$item['quantity_value'] !== floor((float)$item['quantity_value'])) {
+                throw new RuntimeException('Producto ' . ($idx + 1) . ' tiene cantidad decimal, pero pedido_items solo acepta enteros.');
+            }
+            if (!in_array((string)$item['stock_status'], ['cubre_completo'], true)) {
+                throw new RuntimeException('Producto ' . ($idx + 1) . ' no tiene stock confirmado.');
+            }
+            if ((int)($item['stock'] ?? 0) < (int)$item['quantity_value']) {
+                throw new RuntimeException('Stock insuficiente para ' . (string)($item['current_product_name'] ?? $item['product_text']));
+            }
+        }
+
+        $clienteId = findOrCreateEmailCustomer($pdo, $mail);
+        $pedido = insertPedidoFromEmail($pdo, $clienteId, $mail, $items, $usuarioId);
+        $pdo->prepare("
+            UPDATE email_inbox_messages
+            SET confirmed_pedido_id = ?,
+                confirmation_email_status = 'pendiente',
+                confirmation_email_error = NULL,
+                review_status = 'candidato_pedido',
+                reviewed_at = NOW(),
+                is_unseen = 0
+            WHERE id = ?
+        ")->execute([$pedido['pedido_id'], $emailId]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+
+    $stMail = $pdo->prepare("SELECT * FROM email_inbox_messages WHERE id = ? LIMIT 1");
+    $stMail->execute([$emailId]);
+    $mail = $stMail->fetch();
+    if (!$mail) {
+        throw new RuntimeException('No se encontro el correo confirmado.');
+    }
+    return sendConfirmationEmailForMail($pdo, $mail, (int)$pedido['pedido_id'], (string)$pedido['folio']);
+}
+
+function pedidoEmailFolio(PDO $pdo, int $pedidoId): string
+{
+    if ($pedidoId <= 0) return '';
+    if (columnExists($pdo, 'pedidos', 'folio_hex')) {
+        $st = $pdo->prepare("SELECT folio_hex FROM pedidos WHERE id = ? LIMIT 1");
+        $st->execute([$pedidoId]);
+        $folio = trim((string)($st->fetchColumn() ?: ''));
+        if ($folio !== '') return $folio;
+    }
+    return strtoupper(dechex($pedidoId));
+}
+
+function sendConfirmationEmailForMail(PDO $pdo, array $mail, int $pedidoId, string $folio): array
+{
+    $emailId = (int)($mail['id'] ?? 0);
+    if ($emailId <= 0 || $pedidoId <= 0) {
+        throw new RuntimeException('Faltan datos para enviar la confirmacion.');
+    }
+    $items = emailAiItemsForOrder($pdo, $emailId);
+    if (!$items) {
+        throw new RuntimeException('No hay productos tipados para armar el correo de confirmacion.');
+    }
+    $subject = 'Confirmacion de pedido #' . $folio;
+    $body = buildEmailConfirmationBody($mail, $items, $pedidoId, $folio);
+    $htmlBody = buildEmailConfirmationHtml($mail, $items, $pedidoId, $folio);
+
+    try {
+        $account = emailInboxSmtpAccount($pdo, $mail);
+        smtpSendMail($account, (string)$mail['from_email'], $subject, $body, $htmlBody);
+        $pdo->prepare("UPDATE email_inbox_messages SET confirmation_sent_at = NOW(), confirmation_email_status = 'enviado', confirmation_email_error = NULL WHERE id = ?")
+            ->execute([$emailId]);
+        registrarNotificacionEvento($pdo, $pedidoId, findOrCreateEmailCustomer($pdo, $mail), 'email', 'pedido_confirmado_email', $body, 'enviado', ['email_inbox_id' => $emailId]);
+        return ['pedido_id' => $pedidoId, 'folio' => $folio, 'email_sent' => true, 'email_body' => $body];
+    } catch (Throwable $e) {
+        $pdo->prepare("UPDATE email_inbox_messages SET confirmation_email_status = 'error', confirmation_email_error = ? WHERE id = ?")
+            ->execute([mb_substr($e->getMessage(), 0, 2500), $emailId]);
+        throw new RuntimeException('Pedido #' . $folio . ', pero no se pudo enviar el correo: ' . $e->getMessage());
+    }
+}
+
+function resendEmailOrderConfirmation(PDO $pdo, int $emailId): array
+{
+    $stMail = $pdo->prepare("SELECT * FROM email_inbox_messages WHERE id = ? LIMIT 1");
+    $stMail->execute([$emailId]);
+    $mail = $stMail->fetch();
+    if (!$mail) {
+        throw new RuntimeException('No se encontro el correo para reenviar confirmacion.');
+    }
+    $pedidoId = (int)($mail['confirmed_pedido_id'] ?? 0);
+    if ($pedidoId <= 0) {
+        throw new RuntimeException('Este correo todavia no tiene un pedido confirmado.');
+    }
+    return sendConfirmationEmailForMail($pdo, $mail, $pedidoId, pedidoEmailFolio($pdo, $pedidoId));
 }
 
 $msg = '';
@@ -700,29 +2073,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $isOrderPost = (string)($_POST['ai_is_order'] ?? '');
             $isOrder = $isOrderPost === '' ? null : ((int)$isOrderPost === 1);
+            $itemNames = $_POST['ai_item_name'] ?? [];
+            $itemQuantities = $_POST['ai_item_quantity'] ?? [];
+            $itemUnits = $_POST['ai_item_unit'] ?? [];
+            $products = [];
+            if (is_array($itemNames)) {
+                $rows = max(count($itemNames), is_array($itemQuantities) ? count($itemQuantities) : 0);
+                for ($i = 0; $i < $rows; $i++) {
+                    $name = trim((string)($itemNames[$i] ?? ''));
+                    $qtyText = trim((string)($itemQuantities[$i] ?? ''));
+                    $unit = trim((string)($itemUnits[$i] ?? ''));
+                    if ($name === '' && $qtyText === '') continue;
+                    [, $qtyNumber, $unitFromText] = parseQuantityValue($qtyText);
+                    $products[] = [
+                        'producto' => $name,
+                        'cantidad_texto' => $qtyText,
+                        'cantidad_numero' => $qtyNumber,
+                        'unidad' => $unit !== '' ? $unit : $unitFromText,
+                        'unidad_slug' => normalizeUnitSlug($unit !== '' ? $unit : $unitFromText),
+                        'confianza' => null,
+                    ];
+                }
+            }
+            if (!$products) {
+                [, $qtyNumber, $unitFromText] = parseQuantityValue($_POST['ai_quantity'] ?? '');
+                $products[] = [
+                    'producto' => trim((string)($_POST['ai_product'] ?? '')),
+                    'cantidad_texto' => trim((string)($_POST['ai_quantity'] ?? '')),
+                    'cantidad_numero' => $qtyNumber,
+                    'unidad' => $unitFromText,
+                    'unidad_slug' => normalizeUnitSlug($unitFromText),
+                    'confianza' => null,
+                ];
+            }
+            $firstProduct = $products[0] ?? ['producto' => '', 'cantidad_texto' => ''];
+            $deliveryText = trim((string)($_POST['ai_delivery_date'] ?? ''));
+            $deliveryDate = normalizeAiDateValue($_POST['ai_delivery_date_value'] ?? '');
+            if ($deliveryDate === '' && $deliveryText !== '') {
+                $deliveryDate = resolveSpanishRelativeDate($deliveryText, date('Y-m-d'));
+            }
 
             $extraction = [
-                'producto_solicitado' => trim((string)($_POST['ai_product'] ?? '')),
-                'cantidad' => trim((string)($_POST['ai_quantity'] ?? '')),
-                'fecha_entrega' => trim((string)($_POST['ai_delivery_date'] ?? '')),
+                'producto_solicitado' => aiText($firstProduct['producto'] ?? ''),
+                'cantidad' => aiText($firstProduct['cantidad_texto'] ?? ''),
+                'fecha_entrega' => $deliveryText,
+                'fecha_entrega_fecha' => $deliveryDate,
+                'fecha_entrega_hora' => normalizeAiTimeValue($_POST['ai_delivery_time_value'] ?? ''),
+                'fecha_entrega_tipo' => trim((string)($_POST['ai_delivery_type'] ?? '')),
                 'cliente' => trim((string)($_POST['ai_customer'] ?? '')),
                 'observaciones' => trim((string)($_POST['ai_observations'] ?? '')),
                 'nivel_confianza' => $confidenceValue,
                 'es_pedido' => $isOrder,
-                'raw_json' => json_encode([
-                    'producto_solicitado' => trim((string)($_POST['ai_product'] ?? '')),
-                    'cantidad' => trim((string)($_POST['ai_quantity'] ?? '')),
-                    'fecha_entrega' => trim((string)($_POST['ai_delivery_date'] ?? '')),
-                    'cliente' => trim((string)($_POST['ai_customer'] ?? '')),
-                    'observaciones' => trim((string)($_POST['ai_observations'] ?? '')),
-                    'nivel_confianza' => $confidenceValue,
-                    'es_pedido' => $isOrder,
-                    'origen' => 'revision_manual',
-                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'categoria' => trim((string)($_POST['ai_category'] ?? '')),
+                'estado_ia' => trim((string)($_POST['ai_processing_status'] ?? '')),
+                'alertas' => aiList($_POST['ai_alerts'] ?? ''),
+                'productos' => $products,
+                'confianza_campos' => [],
             ];
             saveAiExtraction($pdo, $id, $extraction);
 
-            if ($decision === 'accept') {
+            if ($decision === 'confirm_order') {
+                $result = confirmEmailCandidateAsOrder($pdo, $id, (int)($usuario['usuario_id'] ?? $usuario['id'] ?? 0));
+                $msg = 'Pedido #' . $result['folio'] . ' confirmado y correo enviado al cliente.';
+            } elseif ($decision === 'resend_confirmation') {
+                $result = resendEmailOrderConfirmation($pdo, $id);
+                $msg = 'Correo de confirmacion reenviado para el pedido #' . $result['folio'] . '.';
+            } elseif ($decision === 'accept') {
                 $note = trim((string)($_POST['review_note'] ?? ''));
                 if ($note === '') {
                     $note = 'Validado por administrador desde prellenado IA.';
@@ -738,6 +2154,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = 'Extraccion IA guardada para revision.';
             }
 
+            $postSelectedId = $id;
+        } elseif ($action === 'confirm_email_order') {
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                throw new RuntimeException('Correo invalido para confirmar pedido.');
+            }
+            $result = confirmEmailCandidateAsOrder($pdo, $id, (int)($usuario['usuario_id'] ?? $usuario['id'] ?? 0));
+            $msg = 'Pedido #' . $result['folio'] . ' confirmado y correo enviado al cliente.';
+            $postSelectedId = $id;
+        } elseif ($action === 'resend_confirmation_email') {
+            $id = (int)($_POST['id'] ?? 0);
+            if ($id <= 0) {
+                throw new RuntimeException('Correo invalido para reenviar confirmacion.');
+            }
+            $result = resendEmailOrderConfirmation($pdo, $id);
+            $msg = 'Correo de confirmacion reenviado para el pedido #' . $result['folio'] . '.';
             $postSelectedId = $id;
         } elseif ($action === 'update_review') {
             $id = (int)($_POST['id'] ?? 0);
@@ -845,6 +2277,97 @@ if ($activeMailAccounts > 0 && $selectedId > 0) {
     $stOne = $pdo->prepare("SELECT * FROM email_inbox_messages WHERE id = ? LIMIT 1");
     $stOne->execute([$selectedId]);
     $selected = $stOne->fetch();
+}
+
+function normalizeAiStockStatus(string $status): string
+{
+    $key = aiSearchKey($status);
+    if (in_array($key, ['CUBRE COMPLETO', 'COVERED', 'OK', 'ENOUGH', 'SUFFICIENT', 'FULLY COVERED'], true)) {
+        return 'cubre_completo';
+    }
+    if (in_array($key, ['PARCIAL', 'PARTIAL', 'INSUFFICIENT', 'NOT ENOUGH', 'NO CUBRE COMPLETO'], true)) {
+        return 'parcial';
+    }
+    if (in_array($key, ['SIN STOCK', 'NO STOCK', 'OUT OF STOCK'], true)) {
+        return 'sin_stock';
+    }
+    if (in_array($key, ['CANTIDAD FALTANTE', 'MISSING QUANTITY', 'QUANTITY MISSING'], true)) {
+        return 'cantidad_faltante';
+    }
+    if (in_array($key, ['PRODUCTO NO ENCONTRADO', 'NOT FOUND', 'PRODUCT NOT FOUND'], true)) {
+        return 'producto_no_encontrado';
+    }
+    return $status;
+}
+
+function normalizeAiStockPayload(array $stock): array
+{
+    if (!is_array($stock['items'] ?? null)) {
+        return $stock;
+    }
+
+    $overall = (string)($stock['estado'] ?? '');
+    foreach ($stock['items'] as $idx => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $status = normalizeAiStockStatus((string)($item['status'] ?? $item['stock_status'] ?? ''));
+        $stockAvailable = $item['stock_disponible'] ?? $item['stock_available'] ?? null;
+        $qty = $item['cantidad_solicitada'] ?? $item['quantity_value'] ?? null;
+        $productName = aiText($item['producto_catalogo'] ?? $item['product_name'] ?? '');
+
+        if ($status === '' && $productName !== '') {
+            if ($qty === null || $qty === '') {
+                $status = 'cantidad_faltante';
+            } elseif ($stockAvailable !== null && (float)$stockAvailable >= (float)$qty) {
+                $status = 'cubre_completo';
+            } elseif ($stockAvailable !== null) {
+                $status = 'parcial';
+            }
+        }
+        if ($status === '' && $overall === 'cubre_completo' && $productName !== '') {
+            $status = 'cubre_completo';
+        }
+
+        $item['status'] = $status !== '' ? $status : 'producto_no_encontrado';
+        $item['stock_disponible'] = $stockAvailable;
+        $item['faltante'] = $item['faltante'] ?? $item['stock_missing'] ?? null;
+        $item['producto_catalogo'] = $productName;
+        $item['unidad_stock'] = $item['unidad_stock'] ?? $item['unit_text'] ?? '';
+        $stock['items'][$idx] = $item;
+    }
+
+    return $stock;
+}
+
+function selectedAiPayload(?array $selected): array
+{
+    if (!$selected) return ['productos' => [], 'stock' => [], 'confianza_campos' => [], 'alertas' => []];
+    $raw = json_decode((string)($selected['ai_raw_json'] ?? ''), true);
+    if (!is_array($raw)) $raw = [];
+    $stock = json_decode((string)($selected['ai_stock_json'] ?? ''), true);
+    if (!is_array($stock)) $stock = is_array($raw['stock'] ?? null) ? $raw['stock'] : [];
+    $stock = normalizeAiStockPayload($stock);
+    $products = is_array($raw['productos'] ?? null) ? $raw['productos'] : [];
+    if (!$products && (trim((string)($selected['ai_product'] ?? '')) !== '' || trim((string)($selected['ai_quantity'] ?? '')) !== '')) {
+        [, $qtyNumber, $unit] = parseQuantityValue($selected['ai_quantity'] ?? '');
+        $products[] = [
+            'producto' => (string)($selected['ai_product'] ?? ''),
+            'cantidad_texto' => (string)($selected['ai_quantity'] ?? ''),
+            'cantidad_numero' => $qtyNumber,
+            'unidad' => $unit,
+            'confianza' => null,
+        ];
+    }
+    $columnAlerts = trim((string)($selected['ai_alerts'] ?? '')) !== '' ? preg_split('/\R+/', (string)$selected['ai_alerts']) : [];
+    $rawAlerts = is_array($raw['alertas'] ?? null) ? $raw['alertas'] : [];
+    return [
+        'productos' => $products,
+        'stock' => $stock,
+        'confianza_campos' => is_array($raw['confianza_campos'] ?? null) ? $raw['confianza_campos'] : [],
+        'alertas' => uniqueAiAlerts($columnAlerts ?: $rawAlerts),
+    ];
 }
 
 $failedMailJson = json_encode([
@@ -1013,6 +2536,8 @@ function statusBadge(string $status): string {
             color:#7dd3fc; font-size:11px; font-weight:900; white-space:nowrap;
         }
         .ai-grid { position:relative; z-index:1; display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .ai-products + .ai-grid > .ai-field:nth-child(1),
+        .ai-products + .ai-grid > .ai-field:nth-child(2) { display:none; }
         .ai-grid .full { grid-column:1 / -1; }
         .ai-field label { display:block; margin-bottom:5px; color:#dbeafe; font-size:11px; font-weight:800; }
         .ai-field input, .ai-field select, .ai-field textarea {
@@ -1020,6 +2545,20 @@ function statusBadge(string $status): string {
             background:#1e293b; color:#f8fafc; padding:8px 10px; font-size:13px;
         }
         .ai-field textarea { min-height:82px; resize:vertical; }
+        .ai-summary-row { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 12px; }
+        .ai-chip { border:1px solid rgba(148,163,184,.18); background:rgba(15,23,42,.62); color:#cbd5e1; border-radius:999px; padding:6px 9px; font-size:11px; font-weight:800; }
+        .ai-chip.ok { color:#86efac; border-color:rgba(34,197,94,.35); background:rgba(22,101,52,.16); }
+        .ai-chip.warn { color:#fde68a; border-color:rgba(245,158,11,.35); background:rgba(120,53,15,.18); }
+        .ai-chip.bad { color:#fecaca; border-color:rgba(239,68,68,.35); background:rgba(127,29,29,.18); }
+        .ai-products { position:relative; z-index:1; display:grid; gap:8px; margin:8px 0 12px; }
+        .ai-product-row { display:grid; grid-template-columns:1.5fr .55fr .55fr .8fr; gap:8px; align-items:end; padding:10px; border:1px solid rgba(148,163,184,.16); border-radius:10px; background:rgba(15,23,42,.42); }
+        .ai-product-row .stock-note { font-size:11px; line-height:1.35; color:#cbd5e1; }
+        .ai-product-row .stock-note strong { display:block; color:#f8fafc; }
+        .ai-product-row .stock-note.ok { color:#86efac; }
+        .ai-product-row .stock-note.warn { color:#fde68a; }
+        .ai-product-row .stock-note.bad { color:#fecaca; }
+        .ai-alerts { position:relative; z-index:1; display:grid; gap:6px; margin-bottom:12px; }
+        .ai-alert { border:1px solid rgba(245,158,11,.25); background:rgba(245,158,11,.08); color:#fde68a; border-radius:9px; padding:8px 10px; font-size:12px; }
         .ai-actions { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
         .btn-ai {
             min-height:40px; border-radius:9px; padding:0 14px; border:1px solid rgba(125,211,252,.38);
@@ -1028,7 +2567,57 @@ function statusBadge(string $status): string {
         }
         .btn-ai.primary { border:0; background:#0ea5e9; color:#fff; }
         .btn-ai.accept { border:0; background:#10b981; color:#fff; }
+        .btn-ai.confirm { border:0; background:#22c55e; color:#052e16; }
         .btn-ai.discard { border:0; background:#475569; color:#e2e8f0; }
+        .ai-loading-backdrop {
+            position:fixed; inset:0; z-index:2300; display:none;
+            background:rgba(2,8,23,.82); backdrop-filter:blur(5px);
+        }
+        .ai-loading-backdrop.show { display:block; }
+        .ai-loading-modal {
+            position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+            z-index:2301; display:none; width:min(520px, calc(100vw - 28px));
+            border:1px solid rgba(14,165,233,.32); border-radius:14px;
+            background:linear-gradient(145deg,#0b1222,#081a2f);
+            box-shadow:0 30px 90px rgba(0,0,0,.62); overflow:hidden;
+        }
+        .ai-loading-modal.show { display:block; }
+        .ai-loading-top {
+            padding:18px 18px 14px; display:flex; gap:14px; align-items:flex-start;
+            border-bottom:1px solid rgba(30,41,59,.82);
+        }
+        .ai-loading-orbit {
+            width:48px; height:48px; border-radius:12px; flex:0 0 auto;
+            display:grid; place-items:center; color:#7dd3fc;
+            background:rgba(14,165,233,.12); border:1px solid rgba(14,165,233,.28);
+        }
+        .ai-loading-orbit i { animation:aiSpin 1s linear infinite; }
+        .ai-loading-title { margin:0; color:#f8fafc; font-size:16px; font-weight:900; }
+        .ai-loading-copy { margin:5px 0 0; color:#9fb6d3; font-size:12px; line-height:1.5; }
+        .ai-loading-body { padding:14px 18px 18px; }
+        .ai-loading-steps { display:grid; gap:9px; margin:0 0 14px; padding:0; list-style:none; }
+        .ai-loading-steps li {
+            display:flex; align-items:center; gap:10px; min-height:34px; color:#cbd5e1;
+            font-size:12px; font-weight:700;
+        }
+        .ai-loading-steps span {
+            width:24px; height:24px; border-radius:999px; display:grid; place-items:center;
+            background:rgba(14,165,233,.10); color:#7dd3fc; border:1px solid rgba(14,165,233,.25);
+            font-size:11px;
+        }
+        .ai-loading-bar { height:7px; overflow:hidden; border-radius:999px; background:#172033; }
+        .ai-loading-bar::before {
+            content:''; display:block; height:100%; width:42%; border-radius:999px;
+            background:linear-gradient(90deg,#0ea5e9,#10b981);
+            animation:aiLoadingBar 1.55s ease-in-out infinite;
+        }
+        .ai-loading-foot { margin:10px 0 0; color:#7f93ad; font-size:11px; }
+        @keyframes aiSpin { to { transform:rotate(360deg); } }
+        @keyframes aiLoadingBar {
+            0% { transform:translateX(-110%); }
+            55% { transform:translateX(75%); }
+            100% { transform:translateX(250%); }
+        }
         .review-form { margin-top:16px; display:grid; gap:10px; }
         .review-form label { font-size:12px; color:#dbeafe; font-weight:700; }
         .status-pill {
@@ -1177,6 +2766,7 @@ function statusBadge(string $status): string {
             .mail-accounts-grid .full { grid-column:span 1; }
             .ai-grid { grid-template-columns:1fr; }
             .ai-grid .full { grid-column:span 1; }
+            .ai-product-row { grid-template-columns:1fr; }
             .ai-head { flex-direction:column; }
             .mail-simple-grid,
             .provider-grid { grid-template-columns:1fr; }
@@ -1351,7 +2941,14 @@ function statusBadge(string $status): string {
                                 </div>
                                 <div class="mail-meta"><?= htmlspecialchars($sender) ?> · <?= htmlspecialchars((string)$received) ?></div>
                                 <div class="mail-preview"><?= htmlspecialchars($preview) ?></div>
-                                <div class="mt-2"><span class="<?= statusBadge((string)$r['review_status']) ?>"><?= htmlspecialchars((string)$r['review_status']) ?></span></div>
+                                <div class="mt-2 d-flex flex-wrap gap-1">
+                                    <span class="<?= statusBadge((string)$r['review_status']) ?>"><?= htmlspecialchars((string)$r['review_status']) ?></span>
+                                    <?php if (!empty($r['confirmed_pedido_id'])): ?>
+                                        <span class="status-pill status-ok"><i class="fa-solid fa-receipt"></i> Pedido #<?= (int)$r['confirmed_pedido_id'] ?></span>
+                                    <?php elseif ((string)($r['confirmation_email_status'] ?? '') === 'error'): ?>
+                                        <span class="status-pill status-pending"><i class="fa-solid fa-envelope-circle-xmark"></i> Error correo</span>
+                                    <?php endif; ?>
+                                </div>
                             </a>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -1398,7 +2995,7 @@ function statusBadge(string $status): string {
                             </span>
                         </div>
 
-                        <form method="post" class="ai-actions">
+                        <form method="post" class="ai-actions js-ai-analyze-form">
                             <input type="hidden" name="action" value="analyze_ai">
                             <input type="hidden" name="id" value="<?= (int)$selected['id'] ?>">
                             <button class="btn-ai primary" type="submit">
@@ -1411,9 +3008,84 @@ function statusBadge(string $status): string {
                         </form>
 
                         <?php if ($hasAiExtraction): ?>
-                            <form method="post">
+                            <form method="post" class="js-ai-save-form">
                                 <input type="hidden" name="action" value="save_ai_extraction">
                                 <input type="hidden" name="id" value="<?= (int)$selected['id'] ?>">
+                                <?php
+                                    $aiPayload = selectedAiPayload($selected);
+                                    $aiProducts = $aiPayload['productos'];
+                                    $aiStock = $aiPayload['stock'];
+                                    $aiStockItems = is_array($aiStock['items'] ?? null) ? $aiStock['items'] : [];
+                                    $stockState = (string)($aiStock['estado'] ?? '');
+                                    $stockClass = $stockState === 'cubre_completo' ? 'ok' : (in_array($stockState, ['no_cubre_completo', 'sin_productos'], true) ? 'bad' : 'warn');
+                                    $stockLabel = [
+                                        'cubre_completo' => 'Stock cubre el pedido',
+                                        'no_cubre_completo' => 'Stock insuficiente o producto no encontrado',
+                                        'requiere_cantidad' => 'Falta cantidad para validar stock',
+                                        'sin_productos' => 'Sin productos para validar',
+                                    ][$stockState] ?? 'Stock pendiente';
+                                    if (!$aiProducts) {
+                                        $aiProducts[] = ['producto' => (string)($selected['ai_product'] ?? ''), 'cantidad_texto' => (string)($selected['ai_quantity'] ?? ''), 'unidad' => ''];
+                                    }
+                                ?>
+                                <div class="ai-summary-row">
+                                    <span class="ai-chip <?= ((int)($selected['ai_is_order'] ?? 0) === 1) ? 'ok' : 'warn' ?>">Pedido: <?= ((int)($selected['ai_is_order'] ?? 0) === 1) ? 'Si' : 'Por confirmar' ?></span>
+                                    <span class="ai-chip"><?= htmlspecialchars((string)($selected['ai_category'] ?? 'sin_categoria')) ?></span>
+                                    <span class="ai-chip"><?= htmlspecialchars((string)($selected['ai_processing_status'] ?? 'requiere_revision')) ?></span>
+                                    <span class="ai-chip <?= $stockClass ?>"><?= htmlspecialchars($stockLabel) ?></span>
+                                </div>
+                                <?php if (!empty($aiPayload['alertas'])): ?>
+                                    <div class="ai-alerts">
+                                        <?php foreach ($aiPayload['alertas'] as $alert): ?>
+                                            <div class="ai-alert"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars((string)$alert) ?></div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="ai-products">
+                                    <?php foreach ($aiProducts as $idx => $item): ?>
+                                        <?php
+                                            $stockItem = $aiStockItems[$idx] ?? [];
+                                            $status = (string)($stockItem['status'] ?? '');
+                                            $noteClass = $status === 'cubre_completo' ? 'ok' : (in_array($status, ['parcial', 'sin_stock', 'producto_no_encontrado'], true) ? 'bad' : 'warn');
+                                            $note = 'Pendiente de cotejo';
+                                            if ($status === 'cubre_completo') {
+                                                $note = 'Cubre: ' . ($stockItem['stock_disponible'] ?? '-') . ' ' . ($stockItem['unidad_stock'] ?? '');
+                                            } elseif ($status === 'parcial') {
+                                                $note = 'Faltan ' . ($stockItem['faltante'] ?? '-') . '. Disponible: ' . ($stockItem['stock_disponible'] ?? '-');
+                                            } elseif ($status === 'sin_stock') {
+                                                $note = 'Sin stock disponible';
+                                            } elseif ($status === 'producto_no_encontrado') {
+                                                $note = 'No encontrado en catalogo';
+                                            } elseif ($status === 'cantidad_faltante') {
+                                                $note = 'Producto encontrado, falta cantidad';
+                                            }
+                                            $unitOptions = ['piezas', 'kg', 'toneladas', 'cajas', 'bultos', 'litros', 'otro'];
+                                            $unitValue = normalizeUnitSlug(aiText($item['unidad_slug'] ?? ($item['unidad'] ?? '')));
+                                        ?>
+                                        <div class="ai-product-row">
+                                            <div class="ai-field">
+                                                <label>Producto <?= $idx + 1 ?></label>
+                                                <input name="ai_item_name[]" value="<?= htmlspecialchars(aiText($item['producto'] ?? '')) ?>" placeholder="Producto solicitado">
+                                            </div>
+                                            <div class="ai-field">
+                                                <label>Cantidad</label>
+                                                <input name="ai_item_quantity[]" value="<?= htmlspecialchars(aiText($item['cantidad_texto'] ?? ($item['cantidad'] ?? ''))) ?>" placeholder="15">
+                                            </div>
+                                            <div class="ai-field">
+                                                <label>Unidad</label>
+                                                <select name="ai_item_unit[]">
+                                                    <?php foreach ($unitOptions as $unitOption): ?>
+                                                        <option value="<?= htmlspecialchars($unitOption) ?>" <?= $unitValue === $unitOption ? 'selected' : '' ?>><?= htmlspecialchars($unitOption) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                            <div class="stock-note <?= $noteClass ?>">
+                                                <strong><?= htmlspecialchars($note) ?></strong>
+                                                <?= htmlspecialchars((string)($stockItem['producto_catalogo'] ?? '')) ?>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                                 <div class="ai-grid">
                                     <div class="ai-field">
                                         <label>Producto solicitado</label>
@@ -1424,8 +3096,35 @@ function statusBadge(string $status): string {
                                         <input name="ai_quantity" value="<?= htmlspecialchars((string)($selected['ai_quantity'] ?? '')) ?>" placeholder="Ej: 20 toneladas">
                                     </div>
                                     <div class="ai-field">
-                                        <label>Fecha de entrega</label>
-                                        <input name="ai_delivery_date" value="<?= htmlspecialchars((string)($selected['ai_delivery_date'] ?? '')) ?>" placeholder="Ej: manana / 2026-05-25">
+                                        <label>Fecha entrega</label>
+                                        <?php
+                                            $deliveryTextValue = (string)($selected['ai_delivery_date'] ?? '');
+                                            $deliveryDateValue = (string)($selected['ai_delivery_date_value'] ?? '');
+                                            if ($deliveryDateValue === '' && trim($deliveryTextValue) !== '') {
+                                                $deliveryDateValue = resolveSpanishRelativeDate($deliveryTextValue, (string)($selected['received_at'] ?: $selected['fetched_at'] ?: ''));
+                                            }
+                                            $deliveryType = (string)($selected['ai_delivery_type'] ?? '');
+                                            if ($deliveryType === '' || $deliveryType === 'sin_fecha') {
+                                                $deliveryType = $deliveryDateValue !== '' ? (isRelativeDeliveryText($deliveryTextValue) ? 'fecha_relativa' : 'fecha_exacta') : 'sin_fecha';
+                                            }
+                                        ?>
+                                        <input name="ai_delivery_date_value" type="date" value="<?= htmlspecialchars($deliveryDateValue) ?>">
+                                    </div>
+                                    <div class="ai-field">
+                                        <label>Hora entrega</label>
+                                        <input name="ai_delivery_time_value" type="time" step="60" value="<?= htmlspecialchars(substr((string)($selected['ai_delivery_time_value'] ?? ''), 0, 5)) ?>">
+                                    </div>
+                                    <div class="ai-field">
+                                        <label>Tipo entrega</label>
+                                        <select name="ai_delivery_type">
+                                            <?php foreach (['fecha_exacta','fecha_relativa','ventana','sin_fecha'] as $deliveryTypeOption): ?>
+                                                <option value="<?= htmlspecialchars($deliveryTypeOption) ?>" <?= $deliveryType === $deliveryTypeOption ? 'selected' : '' ?>><?= htmlspecialchars($deliveryTypeOption) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div class="ai-field full">
+                                        <label>Texto original de entrega</label>
+                                        <input name="ai_delivery_date" value="<?= htmlspecialchars($deliveryTextValue) ?>" placeholder="Ej: viernes de esta semana">
                                     </div>
                                     <div class="ai-field">
                                         <label>Cliente</label>
@@ -1434,6 +3133,19 @@ function statusBadge(string $status): string {
                                     <div class="ai-field">
                                         <label>Nivel de confianza</label>
                                         <input name="ai_confidence" type="number" min="0" max="100" step="0.01" value="<?= htmlspecialchars((string)($selected['ai_confidence'] ?? '')) ?>" placeholder="0 a 100">
+                                    </div>
+                                    <div class="ai-field">
+                                        <label>Categoria</label>
+                                        <input name="ai_category" value="<?= htmlspecialchars((string)($selected['ai_category'] ?? '')) ?>" placeholder="pedido_compra">
+                                    </div>
+                                    <div class="ai-field">
+                                        <label>Estado IA</label>
+                                        <select name="ai_processing_status">
+                                            <?php $aiStatus = (string)($selected['ai_processing_status'] ?? 'requiere_revision'); ?>
+                                            <?php foreach (['listo_para_capturar','requiere_revision','incompleto','no_es_pedido'] as $statusOption): ?>
+                                                <option value="<?= htmlspecialchars($statusOption) ?>" <?= $aiStatus === $statusOption ? 'selected' : '' ?>><?= htmlspecialchars($statusOption) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
                                     </div>
                                     <div class="ai-field">
                                         <label>¿Parece pedido?</label>
@@ -1448,15 +3160,47 @@ function statusBadge(string $status): string {
                                         <textarea name="ai_observations" placeholder="Notas detectadas por IA o corregidas por admin"><?= htmlspecialchars((string)($selected['ai_observations'] ?? '')) ?></textarea>
                                     </div>
                                     <div class="ai-field full">
+                                        <label>Alertas IA</label>
+                                        <textarea name="ai_alerts" placeholder="Una alerta por linea"><?= htmlspecialchars(implode("\n", $aiPayload['alertas'])) ?></textarea>
+                                    </div>
+                                    <div class="ai-field full">
                                         <label>Nota operativa para revision</label>
                                         <textarea name="review_note" placeholder="Ej: validar inventario, confirmar tonelaje, solicitar factura"><?= htmlspecialchars((string)($selected['review_note'] ?? '')) ?></textarea>
                                     </div>
                                 </div>
-                                <div class="ai-actions">
-                                    <button class="btn-ai" name="ai_decision" value="save" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar correcciones</button>
-                                    <button class="btn-ai accept" name="ai_decision" value="accept" type="submit"><i class="fa-solid fa-check"></i> Aceptar como candidato</button>
-                                    <button class="btn-ai discard" name="ai_decision" value="discard" type="submit"><i class="fa-solid fa-ban"></i> Descartar</button>
-                                </div>
+                                <?php if (!empty($selected['confirmed_pedido_id'])): ?>
+                                    <div class="ai-summary-row">
+                                        <span class="ai-chip ok"><i class="fa-solid fa-receipt"></i> Pedido confirmado #<?= (int)$selected['confirmed_pedido_id'] ?></span>
+                                        <span class="ai-chip <?= (string)($selected['confirmation_email_status'] ?? '') === 'enviado' ? 'ok' : 'warn' ?>">
+                                            Correo: <?= htmlspecialchars((string)($selected['confirmation_email_status'] ?? 'pendiente')) ?>
+                                        </span>
+                                    </div>
+                                    <?php if (!empty($selected['confirmation_email_error'])): ?>
+                                        <div class="ai-alert"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars((string)$selected['confirmation_email_error']) ?></div>
+                                    <?php endif; ?>
+                                    <div class="ai-actions">
+                                        <button
+                                            class="btn-ai confirm js-resend-confirmation-btn"
+                                            name="ai_decision"
+                                            value="resend_confirmation"
+                                            type="submit"
+                                            onclick="return confirm('Se reenviara el correo de confirmacion sin crear otro pedido ni descontar inventario. Continuar?');"
+                                        ><i class="fa-solid fa-paper-plane"></i> Reenviar correo de confirmacion</button>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="ai-actions">
+                                        <button class="btn-ai" name="ai_decision" value="save" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar correcciones</button>
+                                        <button class="btn-ai accept" name="ai_decision" value="accept" type="submit"><i class="fa-solid fa-check"></i> Aceptar como candidato</button>
+                                        <button
+                                            class="btn-ai confirm js-confirm-order-btn"
+                                            name="ai_decision"
+                                            value="confirm_order"
+                                            type="submit"
+                                            onclick="return confirm('Esto guardara las correcciones, creara el pedido, descontara inventario y enviara el correo de confirmacion al cliente. Continuar?');"
+                                        ><i class="fa-solid fa-paper-plane"></i> Confirmar pedido y enviar correo</button>
+                                        <button class="btn-ai discard" name="ai_decision" value="discard" type="submit"><i class="fa-solid fa-ban"></i> Descartar</button>
+                                    </div>
+                                <?php endif; ?>
                             </form>
                         <?php endif; ?>
                     </section>
@@ -1486,6 +3230,25 @@ function statusBadge(string $status): string {
         </section>
     </div>
 </main>
+<div class="ai-loading-backdrop" id="aiLoadingBackdrop"></div>
+<section class="ai-loading-modal" id="aiLoadingModal" role="alertdialog" aria-modal="true" aria-hidden="true" aria-labelledby="aiLoadingTitle">
+    <div class="ai-loading-top">
+        <div class="ai-loading-orbit"><i class="fa-solid fa-circle-notch"></i></div>
+        <div>
+            <h3 class="ai-loading-title" id="aiLoadingTitle">Analizando pedido con IA</h3>
+            <p class="ai-loading-copy">Estamos leyendo el correo, extrayendo productos y validando existencias contra inventario.</p>
+        </div>
+    </div>
+    <div class="ai-loading-body">
+        <ul class="ai-loading-steps">
+            <li><span><i class="fa-solid fa-envelope-open-text"></i></span> Interpretando el mensaje y detectando si es pedido</li>
+            <li><span><i class="fa-solid fa-boxes-stacked"></i></span> Separando productos, cantidades y unidades</li>
+            <li><span><i class="fa-solid fa-warehouse"></i></span> Comparando contra catalogo y stock disponible</li>
+        </ul>
+        <div class="ai-loading-bar" aria-hidden="true"></div>
+        <p class="ai-loading-foot">Puede tardar unos segundos si Ollama esta iniciando o el correo viene largo.</p>
+    </div>
+</section>
 <div class="mail-modal-backdrop" id="mailAccountsBackdrop"></div>
 <section class="mail-modal" id="mailAccountsModal" aria-hidden="true">
     <div class="mail-modal-header">
@@ -1691,6 +3454,56 @@ function statusBadge(string $status): string {
     </div>
 </section>
 <script>
+(() => {
+    const loadingModal = document.getElementById('aiLoadingModal');
+    const loadingBackdrop = document.getElementById('aiLoadingBackdrop');
+    const forms = document.querySelectorAll('.js-ai-analyze-form');
+    if (!loadingModal || !loadingBackdrop || forms.length === 0) return;
+
+    const showAiLoading = (form) => {
+        loadingModal.classList.add('show');
+        loadingBackdrop.classList.add('show');
+        loadingModal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+
+        const button = form.querySelector('button[type="submit"]');
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Analizando...';
+        }
+    };
+
+    forms.forEach((form) => {
+        form.addEventListener('submit', () => showAiLoading(form));
+    });
+})();
+
+(() => {
+    document.querySelectorAll('.js-ai-save-form').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            const submitter = event.submitter;
+            if (!submitter || !['confirm_order', 'resend_confirmation'].includes(submitter.value)) return;
+
+            let decisionInput = form.querySelector('input[name="ai_decision"][data-confirm-shadow="1"]');
+            if (!decisionInput) {
+                decisionInput = document.createElement('input');
+                decisionInput.type = 'hidden';
+                decisionInput.name = 'ai_decision';
+                decisionInput.dataset.confirmShadow = '1';
+                form.appendChild(decisionInput);
+            }
+            decisionInput.value = submitter.value;
+            submitter.disabled = true;
+            submitter.innerHTML = submitter.value === 'confirm_order'
+                ? '<i class="fa-solid fa-circle-notch fa-spin"></i> Confirmando y enviando...'
+                : '<i class="fa-solid fa-circle-notch fa-spin"></i> Reenviando correo...';
+            form.querySelectorAll('button').forEach((button) => {
+                if (button !== submitter) button.disabled = true;
+            });
+        });
+    });
+})();
+
 (() => {
     const openBtn = document.getElementById('openMailAccountsModal');
     const openBtnFromCard = document.getElementById('openMailAccountsModalFromCard');
