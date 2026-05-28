@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 
@@ -6,6 +6,9 @@ if (!estaLogueado()) {
     header('Location: index.php');
     exit;
 }
+
+// Unlock session file to allow concurrent AJAX requests (prevents background sync from blocking the UI)
+session_write_close();
 
 $usuario = usuarioActual();
 $esAdmin = esAdmin();
@@ -35,7 +38,73 @@ function openwaApiKey(): string {
     return 'dev-admin-key';
 }
 
+function openwaIsLocalUrl(): bool {
+    $host = parse_url(openwaBaseUrl(), PHP_URL_HOST);
+    return in_array(strtolower((string)$host), ['localhost', '127.0.0.1', '::1'], true);
+}
+
+function openwaIsRunning(): bool {
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'ignore_errors' => true,
+            'timeout' => 2,
+        ],
+    ]);
+
+    $raw = @file_get_contents(openwaBaseUrl() . '/api/health', false, $context);
+    return $raw !== false;
+}
+
+function startOpenwaFromProject(bool $waitForReady = true): bool {
+    // Deshabilitado para evitar conflictos (EADDRINUSE) con la consola del usuario.
+    return false;
+
+    $projectDir = __DIR__ . DIRECTORY_SEPARATOR . 'OpenWA';
+    $distMain = $projectDir . DIRECTORY_SEPARATOR . 'dist' . DIRECTORY_SEPARATOR . 'main.js';
+    $packageJson = $projectDir . DIRECTORY_SEPARATOR . 'package.json';
+    if (!is_dir($projectDir) || !is_file($distMain) || !is_file($packageJson)) {
+        return false;
+    }
+
+    $logsDir = __DIR__ . DIRECTORY_SEPARATOR . 'logs';
+    if (!is_dir($logsDir)) {
+        @mkdir($logsDir, 0775, true);
+    }
+    $outLog = $logsDir . DIRECTORY_SEPARATOR . 'openwa.out.log';
+    $errLog = $logsDir . DIRECTORY_SEPARATOR . 'openwa.err.log';
+    $port = parse_url(openwaBaseUrl(), PHP_URL_PORT) ?: 2785;
+
+    if (stripos(PHP_OS_FAMILY, 'Windows') !== false) {
+        $launcher = $logsDir . DIRECTORY_SEPARATOR . 'start_openwa.cmd';
+        $bat = "@echo off\r\n"
+            . "cd /D \"" . $projectDir . "\"\r\n"
+            . "set PORT=" . $port . "\r\n"
+            . "npm run start:prod >> \"" . $outLog . "\" 2>> \"" . $errLog . "\"\r\n";
+        @file_put_contents($launcher, $bat);
+        @pclose(@popen('start "" /B "' . $launcher . '"', 'r'));
+    } else {
+        $cmd = 'cd ' . escapeshellarg($projectDir) . ' && PORT=' . escapeshellarg((string)$port) . ' npm run start:prod >> ' . escapeshellarg($outLog) . ' 2>> ' . escapeshellarg($errLog) . ' &';
+        @exec($cmd);
+    }
+
+    if (!$waitForReady) {
+        return true;
+    }
+
+    for ($i = 0; $i < 10; $i++) {
+        usleep(700000);
+        if (openwaIsRunning()) {
+            return true;
+        }
+    }
+
+    return openwaIsRunning();
+}
+
 function openwaRequest(string $method, string $path, ?array $payload = null, array $query = []): array {
+    startOpenwaFromProject(false);
+
     $url = openwaBaseUrl() . '/api' . $path;
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
@@ -53,11 +122,15 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
             'header' => implode("\r\n", $headers),
             'content' => $body ?? '',
             'ignore_errors' => true,
-            'timeout' => 12,
+            'timeout' => 60,
         ],
     ]);
 
     $raw = @file_get_contents($url, false, $context);
+    if ($raw === false && startOpenwaFromProject(true)) {
+        $raw = @file_get_contents($url, false, $context);
+    }
+
     $status = 0;
     if (isset($http_response_header) && is_array($http_response_header)) {
         foreach ($http_response_header as $headerLine) {
@@ -69,7 +142,7 @@ function openwaRequest(string $method, string $path, ?array $payload = null, arr
     }
 
     if ($raw === false) {
-        return ['ok' => false, 'status' => 0, 'error' => 'No se pudo conectar con OpenWA en ' . openwaBaseUrl()];
+        return ['ok' => false, 'status' => 0, 'error' => 'OpenWA todavia no responde en ' . openwaBaseUrl()];
     }
 
     $json = json_decode($raw, true);
@@ -99,6 +172,23 @@ function respondJson(array $payload, int $status = 200): void {
     exit;
 }
 
+function textEndsWith(string $value, string $suffix): bool {
+    return $suffix === '' || substr($value, -strlen($suffix)) === $suffix;
+}
+
+function isPrimaryWhatsAppChat(string $chatId): bool {
+    $chatId = strtolower(trim($chatId));
+    if ($chatId === '') {
+        return false;
+    }
+
+    if ($chatId === 'status@broadcast' || textEndsWith($chatId, '@broadcast')) {
+        return false;
+    }
+
+    return textEndsWith($chatId, '@c.us') || textEndsWith($chatId, '@g.us') || textEndsWith($chatId, '@lid');
+}
+
 function normalizeMessages(array $payload): array {
     $messages = $payload['messages'] ?? $payload;
     if (!is_array($messages)) {
@@ -122,7 +212,7 @@ function normalizeMessages(array $payload): array {
         }
 
         $rows[] = [
-            'id' => (string)($message['id']['_serialized'] ?? $message['id'] ?? $message['waMessageId'] ?? ''),
+            'id' => (string)(is_array($message['id'] ?? null) ? ($message['id']['_serialized'] ?? '') : ($message['waMessageId'] ?? $message['id'] ?? '')),
             'chatId' => $cId,
             'body' => (string)($message['body'] ?? $message['text'] ?? $message['caption'] ?? ''),
             'type' => (string)($message['type'] ?? 'text'),
@@ -130,11 +220,26 @@ function normalizeMessages(array $payload): array {
             'status' => (string)($message['status'] ?? ''),
             'timestamp' => $message['timestamp'] ?? $message['createdAt'] ?? null,
             'createdAt' => $message['createdAt'] ?? null,
+            'caption' => (string)($message['caption'] ?? $message['body'] ?? ''),
+            'deprecatedMms3Url' => $message['deprecatedMms3Url'] ?? $message['clientUrl'] ?? null,
+            'mediaUrl' => $message['mediaUrl'] ?? $message['deprecatedMms3Url'] ?? $message['clientUrl'] ?? null,
+            'mimetype' => $message['mimetype'] ?? $message['media']['mimetype'] ?? null,
+            'mediaData' => $message['mediaData'] ?? null,
+            'filehash' => $message['filehash'] ?? null,
         ];
     }
 
     usort($rows, function ($a, $b) {
-        return strtotime((string)($b['createdAt'] ?? $b['timestamp'] ?? '')) <=> strtotime((string)($a['createdAt'] ?? $a['timestamp'] ?? ''));
+        $getTs = function($val) {
+            if (empty($val)) return 0;
+            if (is_numeric($val)) {
+                $num = (int)$val;
+                return $num > 20000000000 ? (int)($num / 1000) : $num;
+            }
+            $ts = @strtotime((string)$val);
+            return $ts === false ? 0 : $ts;
+        };
+        return $getTs($b['timestamp'] ?? $b['createdAt'] ?? 0) <=> $getTs($a['timestamp'] ?? $a['createdAt'] ?? 0);
     });
 
     return ['messages' => $rows, 'total' => (int)($payload['total'] ?? count($rows))];
@@ -144,14 +249,14 @@ function conversationSummary(array $messages): array {
     $byChat = [];
     foreach ($messages as $message) {
         $chatId = $message['chatId'] ?? '';
-        if ($chatId === '') {
+        if ($chatId === '' || !isPrimaryWhatsAppChat((string)$chatId)) {
             continue;
         }
         if (!isset($byChat[$chatId])) {
             $byChat[$chatId] = [
                 'chatId' => $chatId,
                 'lastBody' => $message['body'] ?: '[' . ($message['type'] ?: 'mensaje') . ']',
-                'lastAt' => $message['createdAt'] ?? $message['timestamp'] ?? null,
+                'lastAt' => $message['timestamp'] ?? $message['createdAt'] ?? null,
                 'count' => 0,
                 'incoming' => 0,
                 'outgoing' => 0,
@@ -220,6 +325,55 @@ if (isset($_GET['action'])) {
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
 
+    if ($action === 'get_media') {
+        $sessionId = trim((string)($_GET['session_id'] ?? ''));
+        $chatId = trim((string)($_GET['chat_id'] ?? ''));
+        $messageId = trim((string)($_GET['message_id'] ?? ''));
+        if ($sessionId === '' || $chatId === '' || $messageId === '') {
+            http_response_code(400); exit;
+        }
+        $res = openwaRequest('GET', '/sessions/' . rawurlencode($sessionId) . '/messages/' . rawurlencode($chatId) . '/' . rawurlencode($messageId) . '/media');
+        if ($res['ok'] && isset($res['data']['data'])) {
+            $base64 = $res['data']['data'];
+            $mime = $res['data']['mimetype'] ?? 'application/octet-stream';
+            header('Content-Type: ' . $mime);
+            header('Cache-Control: public, max-age=86400');
+            echo base64_decode($base64);
+        } else {
+            http_response_code(404);
+        }
+        exit;
+    }
+
+    if ($action === 'send_media' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $input = json_decode((string)file_get_contents('php://input'), true);
+        $sessionId = trim((string)($input['session_id'] ?? ''));
+        $chatId = trim((string)($input['chat_id'] ?? ''));
+        $caption = trim((string)($input['caption'] ?? ''));
+        $mimetype = trim((string)($input['mimetype'] ?? ''));
+        $filename = trim((string)($input['filename'] ?? ''));
+        $data = trim((string)($input['data'] ?? ''));
+        
+        if (strpos($data, ';base64,') !== false) {
+            $data = substr($data, strpos($data, ';base64,') + 8);
+        }
+
+        $endpoint = trim((string)($input['endpoint'] ?? 'send-document'));
+
+        if ($sessionId === '' || $chatId === '' || $data === '') {
+            respondJson(['ok' => false, 'error' => 'Faltan datos.'], 400);
+        }
+
+        $res = openwaRequest('POST', '/sessions/' . rawurlencode($sessionId) . '/messages/' . $endpoint, [
+            'chatId' => $chatId,
+            'caption' => $caption,
+            'mimetype' => $mimetype,
+            'filename' => $filename,
+            'base64' => $data,
+        ]);
+        respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
+    }
+
     if ($action === 'engine_chat_messages') {
         $sessionId = trim((string)($_GET['session_id'] ?? ''));
         $chatId = trim((string)($_GET['chat_id'] ?? ''));
@@ -228,6 +382,10 @@ if (isset($_GET['action'])) {
         }
         $query = ['limit' => min(200, max(1, (int)($_GET['limit'] ?? 50)))];
         $res = openwaRequest('GET', '/sessions/' . rawurlencode($sessionId) . '/chats/' . rawurlencode($chatId) . '/messages', null, $query);
+        if ($res['ok']) {
+            $normalized = normalizeMessages(is_array($res['data']) ? $res['data'] : []);
+            $res['data'] = $normalized['messages'];
+        }
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
 
@@ -263,6 +421,7 @@ if (isset($_GET['action'])) {
         ]);
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
+
 
     if ($action === 'create_session' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $input = json_decode((string)file_get_contents('php://input'), true);
@@ -322,6 +481,16 @@ if (isset($_GET['action'])) {
         respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
     }
 
+    if ($action === 'get_profile_pic') {
+        $sessionId = trim((string)($_GET['session_id'] ?? ''));
+        $chatId = trim((string)($_GET['chat_id'] ?? ''));
+        if ($sessionId === '' || $chatId === '') {
+            respondJson(['ok' => false, 'error' => 'Falta session_id o chat_id'], 400);
+        }
+        $res = openwaRequest('GET', '/sessions/' . rawurlencode($sessionId) . '/contacts/' . rawurlencode($chatId) . '/profile-picture');
+        respondJson($res, $res['ok'] ? 200 : ($res['status'] ?: 502));
+    }
+
     respondJson(['ok' => false, 'error' => 'Accion no soportada.'], 404);
 }
 ?>
@@ -369,8 +538,8 @@ if (isset($_GET['action'])) {
         .wa-chat { display:flex; flex-direction:column; min-height:0; border:1px solid rgba(255,255,255,0.08); background:rgba(10,20,35,0.55); backdrop-filter:blur(16px); border-radius:18px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
         .wa-chat-head { flex-shrink:0; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; gap:10px; background:rgba(0,0,0,0.1); }
         .wa-chat-body { flex:1; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:10px; padding:14px; min-height:0; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.15) transparent; }
-        .wa-compose { flex-shrink:0; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.06); display:grid; grid-template-columns:1fr auto; gap:10px; background:rgba(0,0,0,0.1); }
-        .wa-compose input { border-radius:999px; padding:9px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff; transition:all .2s; width:100%; }
+        .wa-compose { flex-shrink:0; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.1); }
+        .wa-compose input { border-radius:999px; padding:9px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff; transition:all .2s; flex:1; min-width:0; }
         .wa-compose input:focus { background:rgba(0,0,0,0.3); border-color:rgba(0,212,255,0.5); box-shadow:0 0 0 3px rgba(0,212,255,0.1); outline:none; }
         .wa-compose button { border-radius:999px; padding:9px 20px; font-weight:700; white-space:nowrap; }
 
@@ -396,9 +565,13 @@ if (isset($_GET['action'])) {
         .wa-session-delete:hover { background:rgba(239,68,68,0.3); color:#fff; }
 
         /* Conversation items */
-        .wa-convo { width:100%; text-align:left; border:1px solid rgba(255,255,255,0.04); border-radius:10px; padding:8px 10px; background:rgba(255,255,255,0.02); color:#e5edf8; margin-bottom:4px; cursor:pointer; transition:all .2s; display:block; }
-        .wa-convo strong { display:block; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:700; }
-        .wa-convo span { display:block; color:var(--text-muted); font-size:10.5px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .wa-convo { width:100%; text-align:left; border:1px solid rgba(255,255,255,0.04); border-radius:12px; padding:9px 10px; background:rgba(255,255,255,0.02); color:#e5edf8; margin-bottom:6px; cursor:pointer; transition:all .2s; display:block; }
+        .wa-convo-top { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+        .wa-convo-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; font-weight:800; color:#f8fafc; }
+        .wa-convo-time { flex-shrink:0; color:rgba(148,163,184,.82); font-size:10px; }
+        .wa-convo-preview { display:block; color:var(--text-muted); font-size:10.8px; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .wa-convo-meta { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:5px; }
+        .wa-convo-count { flex-shrink:0; border-radius:999px; padding:2px 7px; background:rgba(15,23,42,.66); border:1px solid rgba(148,163,184,.16); color:#bae6fd; font-size:10px; font-weight:800; }
         .wa-convo:hover { background:rgba(255,255,255,0.05); border-color:rgba(0,212,255,.3); transform:translateX(2px); }
         .wa-convo.active { background:rgba(0,212,255,0.08); border-color:rgba(0,212,255,.55); }
 
@@ -421,6 +594,16 @@ if (isset($_GET['action'])) {
         .wa-search::placeholder { color:rgba(255,255,255,0.3); }
         .wa-btn-new { display:flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; font-size:12px; font-weight:600; border-radius:9px; cursor:pointer; background:rgba(0,212,255,0.1); border:1px solid rgba(0,212,255,0.25); color:#67e8f9; transition:all .2s; width:100%; }
         .wa-btn-new:hover { background:rgba(0,212,255,0.18); }
+
+        /* Media in bubbles */
+        .wa-image { max-width:280px; max-height:280px; width:auto; height:auto; object-fit:contain; border-radius:12px; margin:4px 0; display:block; cursor:pointer; transition:opacity .2s; }
+        .wa-image:hover { opacity:.9; }
+        .wa-caption { font-size:12.5px; color:rgba(255,255,255,0.8); margin-top:4px; word-break:break-word; }
+
+        /* Loader */
+        .wa-loader { height: 3px; width: 100%; background: rgba(0,212,255,0.1); position: relative; overflow: hidden; flex-shrink: 0; display: none; }
+        .wa-loader::after { content: ''; position: absolute; top: 0; left: 0; height: 100%; width: 40%; background: #00d4ff; animation: loadingBar 1s infinite ease-in-out; border-radius: 3px; }
+        @keyframes loadingBar { 0% { left: -40%; } 100% { left: 100%; } }
 
         @keyframes slideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
@@ -468,7 +651,7 @@ if (isset($_GET['action'])) {
             <div class="wa-stat"><strong id="statSessions">0</strong><span>Sesiones</span></div>
             <div class="wa-stat"><strong id="statReady">0</strong><span>Conectadas</span></div>
             <div class="wa-stat"><strong id="statConvos">0</strong><span>Conversaciones</span></div>
-            <div class="wa-stat"><strong id="statMessages">0</strong><span>Mensajes cargados</span></div>
+            <div class="wa-stat" style="display:none !important;"><strong id="statMessages">0</strong><span>Mensajes cargados</span></div>
         </div>
 
         <div class="wa-shell">
@@ -513,7 +696,10 @@ if (isset($_GET['action'])) {
                             <span class="wa-badge" id="statConvosBadge">0</span>
                         </div>
                         <button class="wa-btn-new" onclick="startNewChat()"><i class="fas fa-plus"></i> Nuevo Chat</button>
-                        <input id="chatSearch" class="wa-search" placeholder="ðŸ” Buscar..." oninput="filterChats(this.value)">
+                        <input id="chatSearch" class="wa-search" placeholder="🔍 Buscar..." oninput="filterChats(this.value)">
+                    </div>
+                    <div id="chatListLoader" style="height:3px; width:100%; background:rgba(0,212,255,0.1); position:relative; overflow:hidden; flex-shrink:0; display:none;">
+                        <div id="chatListProgressBar" style="height:100%; width:0%; background:#00d4ff; border-radius:3px;"></div>
                     </div>
                     <div class="wa-convos-list" id="conversationList"><div class="wa-empty">Selecciona una sesiÃ³n.</div></div>
                 </div>
@@ -532,14 +718,46 @@ if (isset($_GET['action'])) {
                         <span class="wa-status" id="sessionStatus">sin sesion</span>
                     </div>
                 </div>
+                <div id="chatBodyLoader" style="height:3px; width:100%; background:rgba(0,212,255,0.1); position:relative; overflow:hidden; flex-shrink:0; display:none;">
+                    <div id="chatBodyProgressBar" style="height:100%; width:0%; background:#00d4ff; border-radius:3px;"></div>
+                </div>
                 <div class="wa-chat-body" id="chatBody"><div class="wa-empty">Aun no hay mensajes cargados.</div></div>
+                
+                <!-- Media Preview Area -->
+                <div id="mediaPreview" style="display:none; padding:10px; background:rgba(255,255,255,0.05); border-top:1px solid rgba(255,255,255,0.1); align-items:center; gap:10px;">
+                    <div id="mediaPreviewImgContainer" style="width:50px; height:50px; border-radius:8px; overflow:hidden; background:#000; display:flex; align-items:center; justify-content:center;">
+                        <img id="mediaPreviewImg" src="" style="max-width:100%; max-height:100%; object-fit:cover; display:none;">
+                        <i id="mediaPreviewIcon" class="fa-solid fa-file" style="color:white; display:none; font-size:24px;"></i>
+                    </div>
+                    <div style="flex:1; overflow:hidden;">
+                        <div id="mediaPreviewName" style="color:white; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                        <div id="mediaPreviewSize" style="color:#94a3b8; font-size:11px;"></div>
+                    </div>
+                    <button type="button" class="btn-danger-custom" onclick="clearMediaPreview()" style="padding:5px 10px; border-radius:50%;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <form class="wa-compose" id="composeForm">
-                    <input class="modal-input" id="messageInput" placeholder="Escribe un mensaje..." disabled style="border-radius:999px;">
-                    <button class="btn-primary-custom" type="submit" id="sendBtn" disabled><i class="fa-solid fa-paper-plane"></i> Enviar</button>
+                    <label for="mediaInput" class="btn-secondary-custom" style="cursor:pointer; border-radius:999px; padding:9px 14px; margin-right:5px;" title="Adjuntar archivo">
+                        <i class="fa-solid fa-paperclip"></i>
+                    </label>
+                    <input type="file" id="mediaInput" style="display:none;" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx" disabled>
+                    <input class="modal-input" id="messageInput" placeholder="Escribe un mensaje..." disabled style="border-radius:999px; flex:1;">
+                    
+                    <div id="recordingUI" style="display:none; flex:1; align-items:center; justify-content:space-between; background:rgba(239,68,68,0.1); border-radius:999px; padding:0 15px; border:1px solid rgba(239,68,68,0.3);">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:10px; height:10px; border-radius:50%; background:#ef4444; animation: pulse-red 1.5s infinite;"></div>
+                            <span id="recordingTimer" style="color:#ef4444; font-weight:600; font-family:monospace; font-size:15px;">0:00</span>
+                        </div>
+                        <button type="button" id="cancelRecordBtn" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:16px; padding:5px;" title="Cancelar grabación"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+
+                    <button class="btn-primary-custom" type="submit" id="sendBtn" disabled style="display:none;"><i class="fa-solid fa-paper-plane"></i></button>
+                    <button class="btn-primary-custom" type="button" id="recordBtn" disabled style="background:#10b981; border-color:#059669; padding:9px 15px;"><i class="fa-solid fa-microphone"></i></button>
                 </form>
             </section>
         </div>
     </div>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -552,22 +770,44 @@ let latestMessages = [];
 let convos = [];
 let pollTimer = null;
 let currentQr = '';
+let currentMediaFile = null;
 
-
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const getMs = (m) => {
+    if (m === null || m === undefined) return 0;
+    const val = typeof m === 'object' ? (m.timestamp || m.createdAt) : m;
+    if (!val) return 0;
+    if (typeof val === 'number') {
+        return val < 2e10 ? val * 1000 : val;
+    }
+    const parsed = Date.parse(val);
+    if (!isNaN(parsed)) return parsed;
+    const num = Number(val);
+    if (!isNaN(num) && num > 0) {
+        return num < 2e10 ? num * 1000 : num;
+    }
+    return 0;
+};
 
 
 async function api(action, options = {}) {
-    const res = await fetch(`whatsapp.php?action=${action}${options.query || ''}`, {
-        method: options.method || 'GET',
-        headers: { 'Content-Type': 'application/json' },
-        body: options.body ? JSON.stringify(options.body) : undefined,
-        cache: 'no-store'
-    });
-    const payload = await res.json().catch(() => ({ ok:false, error:'Respuesta invalida.' }));
-    if (!res.ok || payload.ok === false) throw new Error(payload.error || 'No se completo la accion.');
-    return payload.data ?? payload;
+    const controller = options.timeoutMs ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), options.timeoutMs) : null;
+    try {
+        const res = await fetch(`whatsapp.php?action=${action}${options.query || ''}`, {
+            method: options.method || 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            body: options.body ? JSON.stringify(options.body) : undefined,
+            cache: 'no-store',
+            signal: controller ? controller.signal : undefined
+        });
+        const payload = await res.json().catch(() => ({ ok:false, error:'Respuesta invalida.' }));
+        if (!res.ok || payload.ok === false) throw new Error(payload.error || 'No se completo la accion.');
+        return payload.data ?? payload;
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
 }
 
 async function refreshSelectedSession() {
@@ -577,25 +817,152 @@ async function refreshSelectedSession() {
         sessions = Array.isArray(data) ? data : [];
         const updated = sessions.find(s => s.id === selectedSession.id);
         if (updated) {
+            const wasReady = ['ready','connected'].includes(String(selectedSession.status || '').toLowerCase());
+            const isReady = ['ready','connected'].includes(String(updated.status || '').toLowerCase());
+            
             selectedSession = updated;
             renderSessions();
             setStatus(selectedSession);
+            
+            if (!wasReady && isReady) {
+                // If it just became ready, load avatars
+                loadAvatars();
+                loadChatList();
+            }
         }
     } catch (_) {
         // Ignore refresh failures; keep using existing session state.
     }
 }
 
+function normalizeChatId(raw) {
+    if (!raw) return '';
+    if (typeof raw === 'object') {
+        if (raw._serialized) return String(raw._serialized);
+        if (raw.user && raw.server) return `${raw.user}@${raw.server}`;
+    }
+    return String(raw).trim();
+}
+
+function isPrimaryChatId(chatId) {
+    const id = normalizeChatId(chatId).toLowerCase();
+    if (!id || id === 'status@broadcast' || id.endsWith('@broadcast')) return false;
+    return id.endsWith('@c.us') || id.endsWith('@g.us') || id.endsWith('@lid');
+}
+
+function firstValue(...values) {
+    for (const value of values) {
+        if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return '';
+}
+
+function fallbackChatName(chatId) {
+    const id = normalizeChatId(chatId);
+    if (id.endsWith('@g.us')) return id.replace('@g.us', ' (grupo)');
+    if (id.endsWith('@c.us')) return '+' + id.replace('@c.us', '');
+    if (id.endsWith('@lid')) return id.replace('@lid', '');
+    return id || 'Chat';
+}
+
+function normalizeConversation(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const last = raw.lastMessage && typeof raw.lastMessage === 'object' ? raw.lastMessage : {};
+    const chatId = normalizeChatId(firstValue(
+        raw.chatId,
+        raw.id,
+        raw.remoteJid,
+        raw.remote,
+        raw.jid,
+        last.chatId,
+        last.fromMe ? last.to : last.from
+    ));
+    if (!isPrimaryChatId(chatId)) return null;
+
+    const rawLastMessage = typeof raw.lastMessage === 'string' ? raw.lastMessage : '';
+    const lastBody = firstValue(
+        raw.lastBody,
+        raw.lastMessageBody,
+        raw.lastMessageText,
+        rawLastMessage,
+        last.body,
+        last.text,
+        last.caption,
+        last.content,
+        raw.body,
+        raw.preview
+    );
+    const type = firstValue(raw.type, last.type, 'mensaje');
+    const lastAt = firstValue(
+        raw.lastAt,
+        raw.lastMessageAt,
+        raw.timestamp,
+        raw.t,
+        raw.updatedAt,
+        raw.createdAt,
+        last.timestamp,
+        last.createdAt
+    );
+    const unread = Number(firstValue(raw.unread, raw.unreadCount, raw.unreadMessages, 0)) || 0;
+    const count = Number(firstValue(raw.count, raw.messageCount, raw.total, 0)) || 0;
+
+    return {
+        chatId,
+        name: String(firstValue(raw.name, raw.pushName, raw.formattedTitle, raw.contactName, raw.displayName, fallbackChatName(chatId))),
+        lastBody: String(lastBody || (type ? `[${type}]` : '')),
+        lastAt,
+        unread,
+        count,
+        incoming: Number(raw.incoming || 0) || 0,
+        outgoing: Number(raw.outgoing || 0) || 0,
+        isGroup: Boolean(raw.isGroup || chatId.endsWith('@g.us')),
+    };
+}
+
+function normalizeConversationList(items) {
+    const byChat = new Map();
+    (Array.isArray(items) ? items : []).forEach(item => {
+        const convo = normalizeConversation(item);
+        if (!convo) return;
+        const existing = byChat.get(convo.chatId);
+        if (!existing) {
+            byChat.set(convo.chatId, convo);
+        } else {
+            const latest = getMs(convo.lastAt) >= getMs(existing.lastAt) ? convo : existing;
+            byChat.set(convo.chatId, {
+                ...existing,
+                ...latest,
+                count: (Number(existing.count) || 0) + (Number(convo.count) || 0),
+                incoming: (Number(existing.incoming) || 0) + (Number(convo.incoming) || 0),
+                outgoing: (Number(existing.outgoing) || 0) + (Number(convo.outgoing) || 0),
+                unread: Math.max(Number(existing.unread) || 0, Number(convo.unread) || 0),
+            });
+        }
+    });
+    return Array.from(byChat.values()).sort((a, b) => {
+        const diff = getMs(b.lastAt) - getMs(a.lastAt);
+        return diff || String(a.name || '').localeCompare(String(b.name || ''), 'es');
+    });
+}
+
 function labelForChat(chatId) {
-    const convo = Array.isArray(convos) ? convos.find(c => c.chatId === chatId) : null;
+    const normalized = normalizeChatId(chatId);
+    const convo = Array.isArray(convos) ? convos.find(c => c.chatId === normalized) : null;
     if (convo && convo.name) return convo.name;
-    return String(chatId || '').replace('@c.us', '').replace('@g.us', ' (grupo)');
+    return fallbackChatName(normalized);
 }
 
 function fmtDate(value) {
     if (!value) return '';
-    const ts = typeof value === 'number' ? (value < 1e12 ? value * 1000 : value) : value;
-    const date = new Date(ts);
+    let ts = value;
+    if (typeof value === 'string') {
+        const num = Number(value);
+        if (!isNaN(num) && num > 0) {
+            ts = num;
+        }
+    }
+    const finalTs = typeof ts === 'number' ? (ts < 2e10 ? ts * 1000 : ts) : ts;
+    const date = new Date(finalTs);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' });
 }
@@ -686,18 +1053,28 @@ async function loadSessions() {
         $('sessionStatus').textContent = 'sin conexion';
         $('sessionStatus').className = 'wa-status';
         $('sessionList').innerHTML = `
-            <div class="wa-empty" style="color:#fcd34d;line-height:1.55;">
-                OpenWA no esta activo.<br>
-                El panel esta listo, pero falta levantar el servicio en ${esc(baseUrl)}.
+            <div class="wa-empty" style="color:#bae6fd;line-height:1.55;">
+                <strong style="color:#f8fafc;">Servicio OpenWA pendiente</strong><br>
+                Inicia el backend en ${esc(baseUrl)} para habilitar sesiones y QR.
             </div>`;
-        $('conversationList').innerHTML = '<div class="wa-empty">Primero levanta OpenWA y crea o inicia una sesion.</div>';
-        $('chatTitle').textContent = 'WhatsApp pendiente de conexion';
-        $('chatSubtitle').textContent = 'El conector PHP funciona; falta que el backend OpenWA este corriendo.';
+        $('conversationList').innerHTML = '<div class="wa-empty">Cuando OpenWA responda, aqui se cargaran tus chats.</div>';
+        $('chatTitle').textContent = 'Conecta OpenWA para continuar';
+        $('chatSubtitle').textContent = 'El panel ya esta integrado; solo falta que el servicio local este activo.';
         $('chatBody').innerHTML = `
-            <div class="wa-empty" style="max-width:560px;margin:0 auto;line-height:1.7;color:#cbd5e1;">
-                <strong style="color:#f8fafc;">No se pudo conectar con OpenWA.</strong><br>
-                Necesitamos el backend OpenWA de tu companero o la URL donde este corriendo.
-                Cuando responda en <code style="color:#67e8f9;">${esc(baseUrl)}</code>, aqui apareceran las sesiones, QR, chats y mensajes.
+            <div class="wa-empty" style="max-width:640px;margin:0 auto;line-height:1.65;color:#cbd5e1;text-align:left;">
+                <div style="display:flex;gap:14px;align-items:flex-start;padding:18px 20px;border:1px solid rgba(14,165,233,.28);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.12),rgba(15,23,42,.62));box-shadow:0 18px 45px rgba(0,0,0,.22);">
+                    <div style="width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(14,165,233,.16);color:#38bdf8;border:1px solid rgba(56,189,248,.28);">
+                        <i class="fa-brands fa-whatsapp"></i>
+                    </div>
+                    <div>
+                        <strong style="display:block;color:#f8fafc;font-size:16px;margin-bottom:6px;">Listo para vincular WhatsApp</strong>
+                        <span>El dashboard ya esta conectado al modulo. Para empezar, levanta OpenWA y despues refresca esta vista.</span>
+                        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+                            <span style="padding:7px 10px;border-radius:999px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.18);color:#93c5fd;">URL esperada: ${esc(baseUrl)}</span>
+                            <span style="padding:7px 10px;border-radius:999px;background:rgba(15,23,42,.72);border:1px solid rgba(148,163,184,.18);color:#86efac;">Al conectar: sesiones, QR, chats y mensajes</span>
+                        </div>
+                    </div>
+                </div>
             </div>`;
         $('createSessionBtn').disabled = true;
         $('startSessionBtn').disabled = true;
@@ -769,62 +1146,266 @@ async function deleteSession(id) {
 }
 
 function renderConversations(items) {
-    convos = items; // Keep global in sync
-    $('statConvos').textContent = items.length;
-    if ($('statConvosBadge')) $('statConvosBadge').textContent = items.length;
+    convos = normalizeConversationList(items);
+    if (selectedChat && !convos.some(c => c.chatId === selectedChat)) {
+        selectedChat = '';
+        latestMessages = [];
+        lastMsgId = '';
+        lastRenderedMsgIds = '';
+        currentRenderedChat = null;
+    }
+
+    $('statConvos').textContent = convos.length;
+    if ($('statConvosBadge')) $('statConvosBadge').textContent = convos.length;
     const list = $('conversationList');
-    if (!items.length) {
-        list.innerHTML = '<div class="wa-empty">Sin conversaciones todavia. Usa "Iniciar Nuevo Chat" para escribir.</div>';
+    if (!convos.length) {
+        list.innerHTML = '<div class="wa-empty">Sin chats reales para mostrar. Los estados y broadcasts no se muestran como conversaciones.</div>';
         return;
     }
-    list.innerHTML = items.map(c => `
+    list.innerHTML = convos.map(c => {
+        const countLabel = c.unread ? `${c.unread} nuevos` : (c.count ? `${c.count} mensajes` : '');
+        const preview = c.lastBody || (c.count ? `${c.count} mensajes` : 'Sin mensajes recientes');
+        
+        // Determinar un avatar basado en si es grupo o contacto
+        const iconClass = c.isGroup ? 'fa-users' : 'fa-user';
+        const avatarBg = c.isGroup ? 'rgba(37,99,235,0.2)' : 'rgba(148,163,184,0.15)';
+        const avatarColor = c.isGroup ? '#60a5fa' : '#cbd5e1';
+        
+        return `
         <button class="wa-convo ${selectedChat === c.chatId ? 'active' : ''}" type="button" data-chat-id="${esc(c.chatId)}">
-            <strong>${esc(labelForChat(c.chatId))}</strong>
-            <span>${esc(c.lastBody || (c.count ? `${c.count} mensajes` : ''))}</span>
-            <span>${esc(fmtDate(c.lastAt))}</span>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="width:40px; height:40px; border-radius:50%; background:${avatarBg}; color:${avatarColor}; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:16px; overflow:hidden; position:relative;">
+                    <img data-avatar="${esc(c.chatId)}" src="" style="width:100%; height:100%; object-fit:cover; position:absolute; top:0; left:0; display:none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <i class="fa-solid ${iconClass}"></i>
+                </div>
+                <div style="flex:1; min-width:0;">
+                    <div class="wa-convo-top">
+                        <span class="wa-convo-name">${esc(labelForChat(c.chatId))}</span>
+                        <span class="wa-convo-time">${esc(fmtDate(c.lastAt))}</span>
+                    </div>
+                    <span class="wa-convo-preview">${esc(preview)}</span>
+                    <div class="wa-convo-meta">
+                        <span class="wa-muted">${esc(c.isGroup ? 'Grupo' : 'Contacto')}</span>
+                        ${countLabel ? `<span class="wa-convo-count">${esc(countLabel)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
         </button>
-    `).join('');
+    `}).join('');
     list.querySelectorAll('.wa-convo').forEach(btn => btn.addEventListener('click', async () => {
-        selectedChat = btn.dataset.chatId || '';
+        const chatId = btn.dataset.chatId || '';
+        if (!isPrimaryChatId(chatId)) return;
+        if (selectedChat === chatId) return; // ignore clicking the already selected chat
+
+        selectedChat = chatId;
         lastMsgId = ''; // reset so detection works fresh for this chat
-        renderConversations(items);
-        // Load messages for this chat from engine
-        if (selectedSession && selectedChat) {
-            try {
-                let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200` });
-                engineMessages = Array.isArray(engineMessages) ? engineMessages : (engineMessages?.messages || []);
-                if (Array.isArray(engineMessages)) {
-                    latestMessages = engineMessages;
-                    lastMsgId = engineMessages.length ? (engineMessages[0]?.id || engineMessages[engineMessages.length-1]?.id || '') : '';
-                }
-            } catch (_) {}
-        }
-        renderChat();
-        // Scroll chat to bottom
+        latestMessages = []; // clear old messages immediately
+        lastRenderedMsgIds = ''; // force full re-render
+        currentRenderedChat = selectedChat;
+        
+        renderConversations(convos);
+        
+        // Show immediate loader while fetching
         const body = $('chatBody');
-        if (body) body.scrollTop = 0; // column-reverse so 0 = bottom
+        if (body) {
+            body.innerHTML = '<div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100%; text-align:center; padding:40px;"><i class="fa-solid fa-circle-notch fa-spin" style="font-size: 60px; color: #00d4ff; filter: drop-shadow(0 0 10px rgba(0,212,255,0.6));"></i><div style="margin-top: 24px; color: #bae6fd; font-size: 18px; font-weight: bold;">Sincronizando el chat...</div><div style="margin-top: 8px; color: #64748b; font-size: 13px; max-width: 300px; line-height: 1.5;">WhatsApp est&aacute; descargando el historial. Por favor espera, esto puede tardar un poco.</div></div>';
+        }
+
+        // Call the centralized load function
+        await loadCurrentChatMessages();
     }));
+
+    loadAvatars();
 }
 
-function renderChat() {
+const loadedAvatars = {};
+
+function loadAvatars() {
+    if (!selectedSession) return;
+    const state = String(selectedSession.status || '').toLowerCase();
+    const isReady = ['ready','connected'].includes(state);
+    if (!isReady) return; // Don't fetch avatars if the engine isn't ready yet
+    
+    document.querySelectorAll('img[data-avatar]:not([data-loading])').forEach(img => {
+        const chatId = img.getAttribute('data-avatar');
+        img.setAttribute('data-loading', 'true');
+        
+        if (loadedAvatars[chatId]) {
+            if (loadedAvatars[chatId] !== 'none') {
+                img.src = loadedAvatars[chatId];
+                img.style.display = 'block';
+                if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
+            }
+            return;
+        }
+
+        api('get_profile_pic', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(chatId)}` })
+            .then(data => {
+                if (data && data.url) {
+                    loadedAvatars[chatId] = data.url;
+                    img.src = data.url;
+                    img.style.display = 'block';
+                    if (img.nextElementSibling) img.nextElementSibling.style.display = 'none';
+                } else {
+                    loadedAvatars[chatId] = 'none';
+                }
+            })
+            .catch(() => {
+                loadedAvatars[chatId] = 'none';
+            });
+    });
+}
+
+// Global variable to track which chat is currently rendered
+let currentRenderedChat = null;
+let lastRenderedMsgIds = ''; // track what we last rendered to avoid unnecessary DOM work
+
+function buildBubble(m) {
+    const isFromMe = m.fromMe === true || m.fromMe === 'true' || String(m.direction || '').toLowerCase() === 'outgoing';
+    const direction = isFromMe ? 'outgoing' : 'incoming';
+    const msgType = String(m.type || 'text').toLowerCase();
+    const msgId = String(m.id || m._id || '');
+
+    let contentHtml = '';
+    
+    // Check if m.body looks like base64 (fallback if mediaData is missing)
+    let fallbackB64 = '';
+    if (m.body && m.body.length > 50 && !m.body.includes(' ') && !m.body.includes('\n')) {
+        fallbackB64 = m.body.startsWith('data:') ? m.body : `data:${m.mimetype || 'application/octet-stream'};base64,${m.body}`;
+    }
+
+    // Image support
+    if (msgType === 'image' || msgType === 'sticker') {
+        const imgSrc = m.mediaUrl || m.deprecatedMms3Url || '';
+        const mediaData = m.mediaData;
+        let b64Src = '';
+        if (mediaData && typeof mediaData === 'object') {
+            b64Src = mediaData.preview || mediaData.base64 || '';
+            if (b64Src && !b64Src.startsWith('data:')) {
+                const mime = m.mimetype || 'image/jpeg';
+                b64Src = `data:${mime};base64,${b64Src}`;
+            }
+        }
+        let finalSrc = b64Src || fallbackB64 || imgSrc;
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+
+        if (finalSrc) {
+            const alt = esc(m.caption || m.body || 'Imagen');
+            contentHtml = `<img src="${esc(finalSrc)}" alt="${alt}" class="wa-image" loading="lazy" onclick="openMediaModal(this.src, 'image')" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')" />`;
+            contentHtml += `<div style="display:none;color:#94a3b8;font-size:12px;">📷 [Imagen no disponible]</div>`;
+            const caption = m.caption || '';
+            if (caption && msgType !== 'sticker') {
+                contentHtml += `<div class="wa-caption">${esc(caption)}</div>`;
+            }
+        } else {
+            contentHtml = `<div>📷 ${esc(m.caption || '[imagen]')}</div>`;
+        }
+    }
+    // Video support
+    else if (msgType === 'video') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<video src="${esc(finalSrc)}" class="wa-image" onclick="openMediaModal(this.src, 'video')" style="max-width:100%; max-height: 250px; border-radius:8px;"></video>`;
+            contentHtml += `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:white; font-size:30px; pointer-events:none; text-shadow:0 2px 4px rgba(0,0,0,0.5);"><i class="fa-solid fa-play-circle"></i></div>`;
+            contentHtml = `<div style="position:relative; display:inline-block;">${contentHtml}</div>`;
+            const caption = m.caption || '';
+            if (caption) {
+                contentHtml += `<div class="wa-caption">${esc(caption)}</div>`;
+            }
+        } else {
+            contentHtml = `<div>🎥 ${esc(m.caption || '[video]')}</div>`;
+        }
+    }
+    // Audio/ptt support
+    else if (msgType === 'audio' || msgType === 'ptt') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<audio src="${esc(finalSrc)}" controls style="max-width:100%; height:40px; margin:4px 0; outline:none;"></audio>`;
+        } else {
+            contentHtml = `<div>🎵 ${esc(m.caption || '[audio]')}</div>`;
+        }
+    }
+    // Document support
+    else if (msgType === 'document') {
+        let finalSrc = fallbackB64 || m.mediaUrl || '';
+        if (!finalSrc && selectedSession) {
+            finalSrc = `whatsapp.php?action=get_media&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat || m.chatId)}&message_id=${encodeURIComponent(msgId)}`;
+        }
+        if (finalSrc) {
+            contentHtml = `<div>📄 <a href="${esc(finalSrc)}" download="${esc(m.caption || 'documento')}" style="color:#60a5fa; text-decoration:none;" target="_blank">${esc(m.caption || 'Descargar Documento')}</a></div>`;
+        } else {
+            contentHtml = `<div>📄 ${esc(m.caption || '[documento]')}</div>`;
+        }
+    }
+    // Default: text
+    else {
+        const text = m.body || `[${m.type || 'mensaje'}]`;
+        contentHtml = `<div>${esc(text)}</div>`;
+    }
+
+    const div = document.createElement('div');
+    div.className = `wa-bubble ${direction}`;
+    div.dataset.msgId = msgId;
+    div.innerHTML = `
+        ${contentHtml}
+        <div class="wa-meta"><span>${esc(direction === 'outgoing' ? 'Enviado' : 'Recibido')}</span><span>${esc(fmtDate(m.timestamp || m.createdAt))}</span><span>${esc(m.status || '')}</span></div>
+    `;
+    return div;
+}
+
+async function renderChat() {
     const body = $('chatBody');
-    const rows = selectedChat ? latestMessages.filter(m => m.chatId === selectedChat) : latestMessages;
+    let rows = selectedChat ? latestMessages.filter(m => m.chatId === selectedChat) : latestMessages;
+    rows.sort((a, b) => getMs(b) - getMs(a));
+
+    // Update UI counters and input states
     $('statMessages').textContent = latestMessages.length;
     $('messageInput').disabled = !selectedSession || !selectedChat;
+    $('mediaInput').disabled = !selectedSession || !selectedChat;
     $('sendBtn').disabled = !selectedSession || !selectedChat;
+    $('recordBtn').disabled = !selectedSession || !selectedChat;
     $('chatSubtitle').textContent = selectedChat ? labelForChat(selectedChat) : 'Selecciona una conversacion para responder.';
+
+    // If chat changed, force full re-render
+    if (currentRenderedChat !== selectedChat) {
+        lastRenderedMsgIds = '';
+        currentRenderedChat = selectedChat;
+    }
+
+    // If no messages, show placeholder
     if (!rows.length) {
-        body.innerHTML = '<div class="wa-empty">Sin mensajes para mostrar.</div>';
+        if (lastRenderedMsgIds !== '__empty__') {
+            body.innerHTML = '<div class="wa-empty">Sin mensajes para mostrar.</div>';
+            lastRenderedMsgIds = '__empty__';
+        }
         return;
     }
-    body.innerHTML = rows.map(m => {
-        const direction = String(m.direction || '').toLowerCase() === 'outgoing' ? 'outgoing' : 'incoming';
-        const text = m.body || `[${m.type || 'mensaje'}]`;
-        return `<div class="wa-bubble ${direction}">
-            <div>${esc(text)}</div>
-            <div class="wa-meta"><span>${esc(direction === 'outgoing' ? 'Enviado' : 'Recibido')}</span><span>${esc(fmtDate(m.createdAt || m.timestamp))}</span><span>${esc(m.status || '')}</span></div>
-        </div>`;
-    }).join('');
+
+    // Check if anything actually changed
+    const newMsgIds = rows.map(m => String(m.id || m._id || '')).join('|');
+    if (newMsgIds === lastRenderedMsgIds) return; // nothing changed, skip DOM work
+
+    // Build all bubbles in a DocumentFragment (off-screen, no flicker)
+    const frag = document.createDocumentFragment();
+    for (const m of rows) {
+        frag.appendChild(buildBubble(m));
+    }
+
+    // Swap content in one paint frame
+    body.innerHTML = '';
+    body.appendChild(frag);
+    lastRenderedMsgIds = newMsgIds;
+
+    // Scroll to bottom (in column-reverse, scrollTop 0 = newest messages visible)
+    body.scrollTop = 0;
 }
 
 let lastMsgId = '';         // track last seen message id to detect new ones
@@ -832,57 +1413,338 @@ let unreadChats = {};       // chatId -> unread count map
 let msgPollTimer = null;    // fast timer for messages (3s)
 let chatListPollTimer = null; // slow timer for chat list (30s)
 
+let chatListLoaderInterval = null;
+function showChatListLoader(show) {
+    const container = $('chatListLoader');
+    const bar = $('chatListProgressBar');
+    if (!container || !bar) return;
+    
+    if (show) {
+        container.style.display = 'block';
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+        
+        if (chatListLoaderInterval) clearInterval(chatListLoaderInterval);
+        
+        let progress = 0;
+        setTimeout(() => {
+            bar.style.transition = 'width 0.2s ease-out';
+            chatListLoaderInterval = setInterval(() => {
+                progress += (90 - progress) * 0.15;
+                bar.style.width = progress + '%';
+            }, 150);
+        }, 50);
+    } else {
+        if (chatListLoaderInterval) {
+            clearInterval(chatListLoaderInterval);
+            chatListLoaderInterval = null;
+        }
+        bar.style.transition = 'width 0.1s ease-out';
+        bar.style.width = '100%';
+        setTimeout(() => {
+            container.style.display = 'none';
+        }, 200);
+    }
+}
+let chatBodyLoaderInterval = null;
+function showChatBodyLoader(show) {
+    const container = $('chatBodyLoader');
+    const bar = $('chatBodyProgressBar');
+    if (!container || !bar) return;
+    
+    if (show) {
+        container.style.display = 'block';
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+        
+        if (chatBodyLoaderInterval) clearInterval(chatBodyLoaderInterval);
+        
+        let progress = 0;
+        setTimeout(() => {
+            bar.style.transition = 'width 0.2s ease-out';
+            chatBodyLoaderInterval = setInterval(() => {
+                progress += (90 - progress) * 0.15;
+                bar.style.width = progress + '%';
+            }, 150);
+        }, 50);
+    } else {
+        if (chatBodyLoaderInterval) {
+            clearInterval(chatBodyLoaderInterval);
+            chatBodyLoaderInterval = null;
+        }
+        bar.style.transition = 'width 0.1s ease-out';
+        bar.style.width = '100%';
+        setTimeout(() => {
+            container.style.display = 'none';
+        }, 200);
+    }
+}
+
 async function loadChatList() {
     if (!selectedSession) return;
     const state = String(selectedSession.status || '').toLowerCase();
-    if (!['ready','connected'].includes(state)) return;
+    const isReady = ['ready','connected'].includes(state);
+    if (!convos.length) showChatListLoader(true);
     try {
-        let engineChats = await api('engine_chats', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000` });
-        engineChats = Array.isArray(engineChats) ? engineChats
-            : (Array.isArray(engineChats?.value) ? engineChats.value
-            : (Array.isArray(engineChats?.data) ? engineChats.data : []));
-        if (engineChats.length) {
-            convos = engineChats.map(c => ({
-                chatId: c.id,
-                name: c.name || c.pushName || '',
-                lastBody: c.lastMessageBody || c.lastMessage || '',
-                lastAt: c.lastMessageAt || c.timestamp || null,
-                unread: c.unreadCount || 0,
-                isGroup: c.isGroup || false,
-                count: 0, incoming: 0, outgoing: 0,
-            }));
-            renderConversations(convos);
+        if (isReady) {
+            let engineChats = await api('engine_chats', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000`, timeoutMs: 30000 });
+            engineChats = Array.isArray(engineChats) ? engineChats
+                : (Array.isArray(engineChats?.value) ? engineChats.value
+                : (Array.isArray(engineChats?.data) ? engineChats.data : []));
+            if (engineChats.length) {
+                convos = normalizeConversationList(engineChats);
+                renderConversations(convos);
+            }
         }
     } catch (_) {}
+    finally { showChatListLoader(false); }
+}
+
+let isBackgroundSyncing = false;
+async function startBackgroundChatSync() {
+    if (isBackgroundSyncing || !selectedSession) return;
+    const state = String(selectedSession.status || '').toLowerCase();
+    if (!['ready','connected'].includes(state)) return;
+    
+    isBackgroundSyncing = true;
+    try {
+        const currentSessionId = selectedSession.id;
+        for (const convo of convos) {
+            if (!selectedSession || selectedSession.id !== currentSessionId) break;
+            const curState = String(selectedSession.status || '').toLowerCase();
+            if (!['ready','connected'].includes(curState)) break;
+            if (!isPrimaryChatId(convo.chatId)) continue;
+            
+            const syncKey = `synced_${currentSessionId}_${convo.chatId}`;
+            if (!localStorage.getItem(syncKey)) {
+                try {
+                    await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(currentSessionId)}&chat_id=${encodeURIComponent(convo.chatId)}&limit=50`, timeoutMs: 30000 });
+                    localStorage.setItem(syncKey, '1');
+                } catch(e) {}
+                
+                // Sleep slightly between fetches to not overload the phone
+                await new Promise(r => setTimeout(r, 1500));
+            }
+        }
+    } finally {
+        isBackgroundSyncing = false;
+    }
+}
+
+async function loadDbMessages(chatId = '') {
+    if (!selectedSession) return [];
+    const data = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=200${chatId ? '&chat_id=' + encodeURIComponent(chatId) : ''}` });
+    return (Array.isArray(data.messages) ? data.messages : [])
+        .map(m => ({ ...m, chatId: normalizeChatId(m.chatId) }))
+        .filter(m => isPrimaryChatId(m.chatId) && (!chatId || m.chatId === chatId));
+}
+const localChatDbPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open('wa_chat_cache', 1);
+    request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('messages')) {
+            db.createObjectStore('messages', { keyPath: 'chatId' });
+        }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+});
+
+async function saveChatToCache(chatId, msgs) {
+    try {
+        const db = await localChatDbPromise;
+        const tx = db.transaction('messages', 'readwrite');
+        tx.objectStore('messages').put({ chatId, msgs: msgs.slice(0, 200) });
+    } catch(e) {}
+}
+
+async function getChatFromCache(chatId) {
+    try {
+        const db = await localChatDbPromise;
+        return new Promise(resolve => {
+            const tx = db.transaction('messages', 'readonly');
+            const req = tx.objectStore('messages').get(chatId);
+            req.onsuccess = () => resolve(req.result ? req.result.msgs : []);
+            req.onerror = () => resolve([]);
+        });
+    } catch(e) { return []; }
 }
 
 async function loadCurrentChatMessages() {
-    if (!selectedSession || !selectedChat) return;
+    if (!selectedSession || !selectedChat) {
+        showChatBodyLoader(false);
+        return;
+    }
+    if (!isPrimaryChatId(selectedChat)) {
+        selectedChat = '';
+        latestMessages = [];
+        renderConversations(convos);
+        await renderChat();
+        return;
+    }
     const state = String(selectedSession.status || '').toLowerCase();
-    if (!['ready','connected'].includes(state)) return;
+    const isReady = ['ready','connected'].includes(state);
+    
+    const isFirstLoad = currentRenderedChat !== selectedChat || latestMessages.length === 0;
+    if (isFirstLoad) showChatBodyLoader(true);
+    
     try {
-        let engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200` });
-        engineMessages = Array.isArray(engineMessages) ? engineMessages
-            : (Array.isArray(engineMessages?.value) ? engineMessages.value
-            : (engineMessages?.messages || []));
-        if (!Array.isArray(engineMessages)) return;
+        let engineMessages = [];
+        
+        if (isFirstLoad) {
+            // Instantly load from cache and database to provide a snappy UI experience
+            let cachedMsgs = await getChatFromCache(selectedChat);
+            let dbMessages = await loadDbMessages(selectedChat);
+            
+            const existingIds = new Set(dbMessages.map(m => m.id || m._id));
+            const newCachedMsgs = cachedMsgs.filter(m => !existingIds.has(m.id || m._id));
+            let initialMessages = [...newCachedMsgs, ...dbMessages];
+            initialMessages.sort((a, b) => getMs(b) - getMs(a));
+
+            if (initialMessages.length > 0) {
+                latestMessages = initialMessages;
+                const newLastId = latestMessages.length ? (latestMessages[0]?.id || latestMessages[latestMessages.length-1]?.id || '') : '';
+                lastMsgId = newLastId;
+                
+                await renderChat();
+                showChatBodyLoader(false);
+
+                // Silently fetch from engine in background to get older messages if needed
+                if (isReady) {
+                    const chatWhenStarted = selectedChat;
+                    api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200`, timeoutMs: 30000 })
+                        .then(res => {
+                            if (selectedChat !== chatWhenStarted) return; // user switched chats
+                            let msgs = Array.isArray(res) ? res : (Array.isArray(res?.value) ? res.value : (res?.messages || []));
+                            if (!Array.isArray(msgs)) msgs = [];
+                            msgs = msgs.map(m => ({ ...m, chatId: normalizeChatId(m.chatId || selectedChat) })).filter(m => m.chatId === selectedChat);
+                            const currentExistingIds = new Set(latestMessages.map(m => m.id || m._id));
+                            const newMsgs = msgs.filter(m => !currentExistingIds.has(m.id || m._id));
+                            if (newMsgs.length > 0) {
+                                latestMessages = [...newMsgs, ...latestMessages];
+                                latestMessages.sort((a, b) => getMs(b) - getMs(a));
+                                renderChat();
+                                saveChatToCache(selectedChat, latestMessages);
+                            }
+                        }).catch(()=>{});
+                }
+                return; // We already rendered, so early return
+            } else {
+                // If Cache and DB are totally empty, wait for the engine and show loader
+                if (isReady) {
+                    engineMessages = await api('engine_chat_messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&chat_id=${encodeURIComponent(selectedChat)}&limit=200`, timeoutMs: 30000 });
+                    engineMessages = Array.isArray(engineMessages) ? engineMessages
+                        : (Array.isArray(engineMessages?.value) ? engineMessages.value
+                        : (engineMessages?.messages || []));
+                    if (!Array.isArray(engineMessages)) engineMessages = [];
+                    engineMessages = engineMessages
+                        .map(m => ({ ...m, chatId: normalizeChatId(m.chatId || selectedChat) }))
+                        .filter(m => m.chatId === selectedChat);
+                }
+            }
+        } else {
+            // Polling: just get the latest from the DB to be fast
+            engineMessages = await loadDbMessages(selectedChat);
+        }
+
+        if (!engineMessages.length && isFirstLoad) {
+            engineMessages = await loadDbMessages(selectedChat);
+        }
+
+        if (isFirstLoad) {
+            latestMessages = engineMessages;
+        } else {
+            const existingIds = new Set(latestMessages.map(m => m.id || m._id));
+            const existingFingerprints = new Set(latestMessages.map(m => `alt_${m.body}_${m.timestamp}_${m.fromMe}`));
+            
+            const newMsgs = engineMessages.filter(m => {
+                const id = m.id || m._id;
+                if (existingIds.has(id)) return false;
+                
+                const fingerprint = `alt_${m.body}_${m.timestamp}_${m.fromMe}`;
+                if (existingFingerprints.has(fingerprint)) return false;
+                
+                // Add to sets so multiple duplicates inside engineMessages itself don't get added
+                existingIds.add(id);
+                existingFingerprints.add(fingerprint);
+                return true;
+            });
+            
+            if (newMsgs.length > 0) {
+                latestMessages = [...newMsgs, ...latestMessages];
+            }
+        }
+
+        // Sort descending (newest first)
+        engineMessages.sort((a, b) => getMs(b) - getMs(a));
+        latestMessages.sort((a, b) => getMs(b) - getMs(a));
 
         // Detect new messages by comparing counts and last ID
         const newLastId = engineMessages.length ? (engineMessages[0]?.id || engineMessages[engineMessages.length-1]?.id || '') : '';
-        const hadNewMessages = newLastId && newLastId !== lastMsgId && latestMessages.length > 0;
+        const newestMsg = engineMessages[0];
+        const isNewestFromMe = newestMsg && (newestMsg.fromMe === true || newestMsg.fromMe === 'true' || String(newestMsg.direction || '').toLowerCase() === 'outgoing');
+        const isIncoming = newestMsg && !isNewestFromMe;
+        const hadNewMessages = newLastId && newLastId !== lastMsgId && latestMessages.length > 0 && isIncoming;
 
         if (hadNewMessages) {
-            // New message arrived â€” notify
             onNewMessage(selectedChat);
         }
 
         if (engineMessages.length > 0) {
-            latestMessages = engineMessages;
             lastMsgId = newLastId;
+            // Update matching conversation in convos so the sidebar updates in real-time
+            const newestMsg = engineMessages[0];
+            const convo = convos.find(c => c.chatId === selectedChat);
+            if (convo) {
+                convo.lastBody = newestMsg.body || `[${newestMsg.type || 'mensaje'}]`;
+                convo.lastAt = newestMsg.timestamp || newestMsg.createdAt;
+                renderConversations(convos);
+            }
         }
 
-        renderChat();
-    } catch (_) {}
+        // One final safety deduplication for initial loads
+        const seenMsg = new Set();
+        latestMessages = latestMessages.filter(m => {
+            const id = m.id || m._id;
+            if (id && seenMsg.has(id)) return false;
+            if (id) seenMsg.add(id);
+            
+            const fingerprint = `alt_${m.body}_${m.timestamp}_${m.fromMe}`;
+            if (seenMsg.has(fingerprint)) return false;
+            seenMsg.add(fingerprint);
+            
+            return true;
+        });
+
+        await renderChat();
+        saveChatToCache(selectedChat, latestMessages);
+    } catch (err) {
+        console.error('[WA] loadCurrentChatMessages error:', err);
+        if (latestMessages.length === 0) {
+            try {
+                const dbMsgs = await loadDbMessages(selectedChat);
+                if (dbMsgs.length) {
+                    dbMsgs.sort((a, b) => getMs(b) - getMs(a));
+                    latestMessages = dbMsgs;
+                    await renderChat();
+                } else {
+                    const body = $('chatBody');
+                    if (body) {
+                        body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
+                        lastRenderedMsgIds = '__error__';
+                    }
+                }
+            } catch (_) {
+                const body = $('chatBody');
+                if (body) {
+                    body.innerHTML = `<div class="wa-empty" style="color:#ef4444;">Error al cargar mensajes: ${esc(err.message)}</div>`;
+                    lastRenderedMsgIds = '__error__';
+                }
+            }
+        }
+    } finally {
+        showChatBodyLoader(false);
+    }
 }
 
 function onNewMessage(chatId) {
@@ -890,7 +1752,7 @@ function onNewMessage(chatId) {
     let originalTitle = document.title;
     let flashCount = 0;
     const flashInterval = setInterval(() => {
-        document.title = flashCount % 2 === 0 ? 'ðŸ’¬ Nuevo mensaje!' : originalTitle;
+        document.title = flashCount % 2 === 0 ? '💬 Nuevo mensaje!' : originalTitle;
         flashCount++;
         if (flashCount > 6) {
             clearInterval(flashInterval);
@@ -937,29 +1799,98 @@ async function loadMessages(force) {
     setStatus(selectedSession);
     try {
         const state = String(selectedSession.status || '').toLowerCase();
+        const isReady = ['ready','connected'].includes(state);
+
+        if (!isReady) {
+            convos = [];
+            latestMessages = [];
+            selectedChat = '';
+            $('conversationList').innerHTML = '<div class="wa-empty" style="color:#cbd5e1;line-height:1.5;text-align:center;">Vincule la sesión para cargar los chats de este número.</div>';
+            $('chatBody').innerHTML = `
+                <div class="wa-empty" style="max-width:640px;margin:0 auto;line-height:1.65;color:#cbd5e1;text-align:left;">
+                    <div style="display:flex;gap:14px;align-items:flex-start;padding:18px 20px;border:1px solid rgba(14,165,233,.28);border-radius:18px;background:linear-gradient(135deg,rgba(14,165,233,.12),rgba(15,23,42,.62));box-shadow:0 18px 45px rgba(0,0,0,.22);">
+                        <div style="width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(14,165,233,.16);color:#38bdf8;border:1px solid rgba(56,189,248,.28);">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </div>
+                        <div>
+                            <strong style="display:block;color:#f8fafc;font-size:16px;margin-bottom:6px;">Sesión inactiva o esperando vinculación</strong>
+                            <span>Asegúrate de que la sesión esté iniciada y vinculada para sincronizar los chats y mensajes.</span>
+                        </div>
+                    </div>
+                </div>`;
+            $('statConvos').textContent = '0';
+            if ($('statConvosBadge')) $('statConvosBadge').textContent = '0';
+            $('chatTitle').textContent = selectedSession.name || 'Sesión inactiva';
+            $('chatSubtitle').textContent = 'Esperando conexión...';
+            
+            if (force || ['qr','qr_ready','initializing','authenticating'].includes(state)) {
+                getQrMaybe();
+            }
+            return;
+        }
 
         // Load chat list on initial load
         if (force || !convos.length) {
-            await loadChatList();
+            let fetchedConvos = [];
+            
+            // Fast load from SQLite database through PHP endpoint
+            try {
+                const dbData = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=1000` });
+                if (dbData && Array.isArray(dbData.conversations)) {
+                    fetchedConvos = dbData.conversations;
+                }
+            } catch (_) {}
+            
+            if (fetchedConvos.length) {
+                convos = normalizeConversationList(fetchedConvos);
+                renderConversations(convos);
+            } else {
+                convos = [];
+                renderConversations(convos);
+            }
+            
+            // Fetch engine chats silently in background to update latest real info
+            if (isReady) {
+                loadChatList().then(() => {
+                    startBackgroundChatSync();
+                }); // Notice: NO await. We don't block the UI!
+            }
         }
 
         // Load messages for current chat
         if (selectedChat) {
             await loadCurrentChatMessages();
-        } else if (convos[0]) {
-            selectedChat = convos[0].chatId;
-            await loadCurrentChatMessages();
+        } else {
+            const firstRealChat = convos.find(c => isPrimaryChatId(c.chatId));
+            if (firstRealChat) {
+                selectedChat = firstRealChat.chatId;
+                await loadCurrentChatMessages();
+            }
         }
 
         // Fallback: DB messages if engine gave nothing
         if (!latestMessages.length) {
             try {
                 const data = await api('messages', { query: `&session_id=${encodeURIComponent(selectedSession.id)}&limit=200${selectedChat ? '&chat_id=' + encodeURIComponent(selectedChat) : ''}` });
-                const dbMsgs = Array.isArray(data.messages) ? data.messages : [];
+                const dbMsgs = (Array.isArray(data.messages) ? data.messages : [])
+                    .map(m => ({ ...m, chatId: normalizeChatId(m.chatId) }))
+                    .filter(m => isPrimaryChatId(m.chatId) && (!selectedChat || m.chatId === selectedChat));
                 if (dbMsgs.length) {
+                    dbMsgs.sort((a, b) => getMs(b) - getMs(a));
+                    if (!selectedChat) {
+                        selectedChat = dbMsgs[0].chatId;
+                    }
                     latestMessages = dbMsgs;
                     if (!convos.length) {
-                        convos = Array.isArray(data.conversations) ? data.conversations : [];
+                        const fallbackConvos = Array.isArray(data.conversations) && data.conversations.length
+                            ? data.conversations
+                            : dbMsgs.map(m => ({
+                            chatId: m.chatId,
+                            lastBody: m.body || `[${m.type || 'mensaje'}]`,
+                            lastAt: m.timestamp || m.createdAt,
+                            count: 1,
+                        }));
+                        convos = normalizeConversationList(fallbackConvos);
                         renderConversations(convos);
                     }
                 }
@@ -982,12 +1913,35 @@ function startPolling() {
     if (!selectedSession) return;
     // Fast poll: refresh current chat messages every 3s
     msgPollTimer = setInterval(async () => {
+        // Fast poll: update current chat messages
         await loadCurrentChatMessages();
+        
+        // Fast poll: update the side chat list using the fast database instead of the heavy engine
+        if (selectedSession && ['ready','connected'].includes(String(selectedSession.status || '').toLowerCase())) {
+            try {
+                const globalMsgs = await loadDbMessages('');
+                if (globalMsgs && globalMsgs.length > 0) {
+                    let updated = false;
+                    for (const m of globalMsgs) {
+                        const convo = convos.find(c => c.chatId === m.chatId);
+                        if (convo) {
+                            const mTime = m.timestamp || m.createdAt;
+                            if (getMs(mTime) > getMs(convo.lastAt)) {
+                                convo.lastBody = m.body || `[${m.type || 'mensaje'}]`;
+                                convo.lastAt = mTime;
+                                updated = true;
+                            }
+                        }
+                    }
+                    if (updated) renderConversations(convos);
+                }
+            } catch(e){}
+        }
     }, 3000);
-    // Slow poll: refresh full chat list every 30s
+    // Slow poll: refresh full chat list every 5 minutes to prevent overloading WhatsApp Web engine
     chatListPollTimer = setInterval(async () => {
         await loadChatList();
-    }, 30000);
+    }, 300000);
 }
 
 function stopPolling() {
@@ -1001,11 +1955,17 @@ function stopPolling() {
 
 async function getQrMaybe() {
     if (!selectedSession) return;
-    const status = String(selectedSession.status || '').toLowerCase();
-    if (['ready','connected'].includes(status)) {
-        $('qrBox').style.display = 'none';
-        return;
+    const stStatus = String(selectedSession.status || '').toLowerCase();
+    const canChat = selectedChat && ['ready','connected'].includes(stStatus);
+    
+    $('messageInput').disabled = !canChat;
+    $('mediaInput').disabled = !canChat;
+    $('sendBtn').disabled = !canChat;
+    
+    if (canChat && !msgPollTimer) {
+        // ... (existing logic)
     }
+    
     try {
         const data = await api('qr', { query: `&session_id=${encodeURIComponent(selectedSession.id)}` });
         const qr = data.qrCode || data.qr || data.dataUrl || '';
@@ -1024,17 +1984,27 @@ async function getQrMaybe() {
 $('refreshBtn').addEventListener('click', loadSessions);
 $('createSessionBtn').addEventListener('click', async () => {
     const name = $('newSessionName').value.trim() || 'mi-whatsapp';
+    const btn = $('createSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...';
+    btn.disabled = true;
     try {
         await api('create_session', { method:'POST', body:{ name } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
+    } finally {
+        btn.innerHTML = orig;
+        btn.disabled = false;
     }
 });
 
 $('startSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    $('startSessionBtn').disabled = true;
+    const btn = $('startSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Iniciando...';
+    btn.disabled = true;
     try {
         await api('start_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
@@ -1045,56 +2015,307 @@ $('startSessionBtn').addEventListener('click', async () => {
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
     }
 });
 
 $('stopSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    $('stopSessionBtn').disabled = true;
+    const btn = $('stopSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Cerrando...';
+    btn.disabled = true;
     try {
         await api('stop_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
     }
 });
 
 $('logoutSessionBtn').addEventListener('click', async () => {
     if (!selectedSession) return;
-    if (!confirm('Â¿Seguro que deseas desvincular esta cuenta de WhatsApp? TendrÃ¡s que volver a escanear el QR.')) return;
-    $('logoutSessionBtn').disabled = true;
+    if (!confirm('¿Seguro que deseas desvincular esta cuenta de WhatsApp? Tendrás que volver a escanear el QR.')) return;
+    const btn = $('logoutSessionBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Desvinculando...';
+    btn.disabled = true;
     try {
         await api('logout_session', { method:'POST', body:{ session_id:selectedSession.id } });
         await loadSessions();
     } catch (err) {
         alert(err.message);
     } finally {
+        btn.innerHTML = orig;
         setStatus(selectedSession);
+    }
+});
+
+function clearMediaPreview() {
+    currentMediaFile = null;
+    $('mediaInput').value = '';
+    $('mediaPreview').style.display = 'none';
+    $('mediaPreviewImg').src = '';
+}
+
+function handleFileSelection(file) {
+    if (!file) {
+        clearMediaPreview();
+        return;
+    }
+    currentMediaFile = file;
+    const preview = $('mediaPreview');
+    const img = $('mediaPreviewImg');
+    const icon = $('mediaPreviewIcon');
+    const name = $('mediaPreviewName');
+    const size = $('mediaPreviewSize');
+    
+    name.textContent = file.name || 'Archivo pegado';
+    size.textContent = (file.size / 1024).toFixed(1) + ' KB';
+    
+    if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        img.src = url;
+        img.style.display = 'block';
+        icon.style.display = 'none';
+        // URL.revokeObjectURL(url) can be called later to save memory
+    } else {
+        img.style.display = 'none';
+        icon.style.display = 'block';
+        if (file.type.startsWith('video/')) icon.className = 'fa-solid fa-video';
+        else if (file.type.startsWith('audio/')) icon.className = 'fa-solid fa-music';
+        else icon.className = 'fa-solid fa-file';
+    }
+    preview.style.display = 'flex';
+}
+
+$('mediaInput').addEventListener('change', (e) => {
+    handleFileSelection(e.target.files[0]);
+    $('messageInput').focus();
+});
+
+$('messageInput').addEventListener('paste', (e) => {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file') {
+            const blob = item.getAsFile();
+            if (blob) {
+                // If it's pasted, it might not have a good name
+                const ext = blob.type.split('/')[1] || 'bin';
+                const f = new File([blob], `Pasted_${Date.now()}.${ext}`, { type: blob.type });
+                handleFileSelection(f);
+                e.preventDefault(); // Stop default pasting if it's an image
+                return;
+            }
+        }
     }
 });
 
 $('composeForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const text = $('messageInput').value.trim();
-    if (!selectedSession || !selectedChat || !text) return;
+    let text = $('messageInput').value.trim();
+    let file = currentMediaFile;
+    
+    // If recording is active, grab the audio blob and send it!
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        const audioData = await stopRecording(false);
+        if (audioData && audioData.blob) {
+            // Construct a File-like object so the existing logic can send it
+            file = new File([audioData.blob], "voice_note.webm", { type: audioData.mimeType });
+            text = ''; // No caption for voice notes
+        }
+    }
+    
+    if (!selectedSession || !selectedChat || (!text && !file)) return;
     $('sendBtn').disabled = true;
     try {
-        await api('send_message', { method:'POST', body:{ session_id:selectedSession.id, chat_id:selectedChat, text } });
+        if (file) {
+            const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+            
+            const mimeTypeRaw = file.type || 'application/octet-stream';
+            const mimetype = mimeTypeRaw.split(';')[0];
+            const filename = file.name || 'archivo';
+            
+            let endpoint = 'send-document';
+            if (mimetype.startsWith('image/')) endpoint = 'send-image';
+            else if (mimetype.startsWith('video/')) endpoint = 'send-video';
+            else if (mimetype.startsWith('audio/')) endpoint = 'send-audio';
+
+            await api('send_media', { 
+                method: 'POST', 
+                body: { 
+                    session_id: selectedSession.id, 
+                    chat_id: selectedChat, 
+                    caption: text,
+                    mimetype: mimetype,
+                    filename: filename,
+                    data: base64Data,
+                    endpoint: endpoint
+                } 
+            });
+            clearMediaPreview();
+        } else {
+            await api('send_message', { method:'POST', body:{ session_id:selectedSession.id, chat_id:selectedChat, text } });
+        }
+        
         $('messageInput').value = '';
+        toggleSendRecordBtns();
         await loadMessages(false);
     } catch (err) {
-        alert(err.message);
+        alert("Error enviando: " + err.message);
     } finally {
         $('sendBtn').disabled = false;
+        $('recordBtn').disabled = false;
     }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadSessions();
+function toggleSendRecordBtns() {
+    const text = $('messageInput').value.trim();
+    const file = currentMediaFile;
+    if (text || file) {
+        $('sendBtn').style.display = 'block';
+        $('recordBtn').style.display = 'none';
+    } else {
+        $('sendBtn').style.display = 'none';
+        $('recordBtn').style.display = 'block';
+    }
+}
+
+$('messageInput').addEventListener('input', toggleSendRecordBtns);
+
+// Audio Recording Logic
+let mediaRecorder;
+let audioChunks = [];
+let recordingInterval;
+let recordingStartTime;
+
+async function startRecording() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('Tu navegador bloqueó el acceso al micrófono. Esto pasa si estás usando una IP (ej. 192.168...) sin HTTPS. Debes acceder desde "localhost" o usar HTTPS.');
+            return;
+        }
+        
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        
+        mediaRecorder.start();
+        
+        // UI Changes
+        $('messageInput').style.display = 'none';
+        $('recordingUI').style.display = 'flex';
+        $('recordBtn').style.display = 'none';
+        $('sendBtn').style.display = 'block';
+        $('sendBtn').disabled = false;
+        
+        const attachLabel = document.querySelector('label[for="mediaInput"]');
+        if (attachLabel) attachLabel.style.display = 'none';
+        
+        recordingStartTime = Date.now();
+        $('recordingTimer').textContent = '0:00';
+        recordingInterval = setInterval(() => {
+            const secs = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const m = Math.floor(secs / 60);
+            const s = secs % 60;
+            $('recordingTimer').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        }, 1000);
+        
+    } catch (err) {
+        alert('No se pudo acceder al micrófono: ' + err.message);
+    }
+}
+
+function stopRecording(cancel = false) {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+    
+    clearInterval(recordingInterval);
+    
+    // Restore UI
+    $('messageInput').style.display = 'block';
+    $('recordingUI').style.display = 'none';
+    const attachLabel = document.querySelector('label[for="mediaInput"]');
+    if (attachLabel) attachLabel.style.display = 'flex';
+    toggleSendRecordBtns();
+    
+    // Stop tracks
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    
+    if (cancel) {
+        mediaRecorder.onstop = null;
+        mediaRecorder.stop();
+        audioChunks = [];
+    } else {
+        return new Promise(resolve => {
+            mediaRecorder.onstop = () => {
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+                const audioBlob = new Blob(audioChunks, { type: mimeType });
+                audioChunks = [];
+                resolve({ blob: audioBlob, mimeType });
+            };
+            mediaRecorder.stop();
+        });
+    }
+}
+
+$('recordBtn').addEventListener('click', startRecording);
+$('cancelRecordBtn').addEventListener('click', () => stopRecording(true));
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadSessions();
+    startPolling();
 });
+</script>
+
+<!-- Media Modal -->
+<div id="waMediaModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; backdrop-filter:blur(5px);">
+    <div style="position:absolute; top:20px; right:30px; display:flex; gap:20px; z-index:10000;">
+        <a id="waMediaDownload" href="#" download="media" style="color:white; font-size:26px; text-decoration:none; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" title="Descargar"><i class="fa-solid fa-download"></i></a>
+        <span id="waMediaClose" style="color:white; font-size:26px; cursor:pointer; transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'" title="Cerrar"><i class="fa-solid fa-xmark"></i></span>
+    </div>
+    <div id="waMediaContent" style="max-width:90%; max-height:85vh; display:flex; justify-content:center; align-items:center;"></div>
+</div>
+
+<script>
+function openMediaModal(src, type) {
+    const modal = document.getElementById('waMediaModal');
+    const content = document.getElementById('waMediaContent');
+    const download = document.getElementById('waMediaDownload');
+    
+    download.href = src;
+    
+    if (type === 'image') {
+        content.innerHTML = `<img src="${src}" style="max-width:100%; max-height:85vh; object-fit:contain; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" />`;
+    } else if (type === 'video') {
+        content.innerHTML = `<video src="${src}" controls autoplay style="max-width:100%; max-height:85vh; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.5);"></video>`;
+    }
+    
+    modal.style.display = 'flex';
+    void modal.offsetWidth; // force reflow
+    modal.style.opacity = '1';
+    
+    document.getElementById('waMediaClose').onclick = () => {
+        modal.style.opacity = '0';
+        setTimeout(() => { modal.style.display = 'none'; content.innerHTML = ''; }, 200);
+    };
+    modal.onclick = (e) => {
+        if (e.target === modal || e.target === content) document.getElementById('waMediaClose').click();
+    };
+}
 </script>
 </body>
 </html>
