@@ -2191,6 +2191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE email_inbox_messages SET is_unseen=? WHERE id=?")->execute([$markSeen, $id]);
 
             $msg = 'Revision actualizada.';
+            $postSelectedId = $id;
         }
     } catch (Throwable $e) {
         $err = $e->getMessage();
@@ -2513,6 +2514,23 @@ function statusBadge(string $status): string {
         }
         .detail-label { color:#dbeafe; font-weight:800; }
         .detail-value { color:#bcd3ee; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+        .mail-original-compact {
+            display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) auto; gap:8px; align-items:center;
+            padding:10px; margin-bottom:12px; border:1px solid rgba(148,163,184,.16); border-radius:9px;
+            background:rgba(8,19,38,.48);
+        }
+        .mail-original-meta { min-width:0; }
+        .mail-original-meta span {
+            display:block; color:#8aa4c2; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.04em;
+        }
+        .mail-original-meta strong {
+            display:block; margin-top:3px; color:#e2e8f0; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
+        .mail-original-body {
+            white-space:pre-wrap; font-size:13px; line-height:1.6;
+            background:#091326; border:1px solid #1d4f73; border-radius:9px;
+            padding:14px; max-height:62vh; overflow:auto; color:#e7f3ff;
+        }
         .mail-body {
             white-space:pre-wrap; font-size:13px; line-height:1.6;
             background:#091326; border:1px solid #1d4f73; border-radius:9px;
@@ -2560,6 +2578,83 @@ function statusBadge(string $status): string {
         .ai-alerts { position:relative; z-index:1; display:grid; gap:6px; margin-bottom:12px; }
         .ai-alert { border:1px solid rgba(245,158,11,.25); background:rgba(245,158,11,.08); color:#fde68a; border-radius:9px; padding:8px 10px; font-size:12px; }
         .ai-actions { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+        .ai-quick-review {
+            position:relative; z-index:1; display:grid; gap:10px; margin:10px 0 12px;
+            border:1px solid rgba(125,211,252,.22); border-radius:10px; background:rgba(15,23,42,.48);
+            padding:10px;
+        }
+        .ai-quick-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+        .ai-quick-head h5 { margin:0; color:#f8fafc; font-size:13px; font-weight:900; }
+        .ai-quick-head p { margin:3px 0 0; color:#9fb6d3; font-size:11px; }
+        .ai-compact-table {
+            width:100%; table-layout:auto; border-collapse:separate; border-spacing:0;
+            border:1px solid rgba(148,163,184,.14); border-radius:8px; overflow:hidden;
+            background:rgba(8,19,38,.45);
+        }
+        .ai-compact-table th,
+        .ai-compact-table td {
+            padding:6px 8px; border-bottom:1px solid rgba(148,163,184,.10);
+            font-size:11px; line-height:1.25; vertical-align:middle; white-space:nowrap;
+        }
+        .ai-compact-table tr:last-child th,
+        .ai-compact-table tr:last-child td { border-bottom:0; }
+        .ai-compact-table th {
+            width:1%; color:#8aa4c2; font-weight:900; text-transform:uppercase; letter-spacing:.04em;
+            background:rgba(15,23,42,.34);
+        }
+        .ai-compact-table td { color:#e2e8f0; font-weight:800; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+        .ai-compact-table .wide { white-space:normal; max-width:none; }
+        .ai-product-table { margin-top:2px; }
+        .ai-product-table th { text-align:left; }
+        .ai-product-table td:nth-child(2),
+        .ai-product-table td:nth-child(3) { width:1%; text-align:right; }
+        .ai-product-table .product-name { max-width:360px; text-align:left; }
+        .ai-stock-ok { color:#86efac !important; }
+        .ai-stock-warn { color:#fde68a !important; }
+        .ai-stock-bad { color:#fecaca !important; }
+        .ai-quick-item {
+            min-width:0; border:1px solid rgba(148,163,184,.12); border-radius:8px;
+            background:rgba(8,19,38,.38); padding:7px 8px; font-size:11px; color:#e2e8f0;
+        }
+        .ai-quick-label { display:block; color:#8aa4c2; font-size:10px; font-weight:900; text-transform:uppercase; letter-spacing:.04em; }
+        .ai-quick-value { display:block; margin-top:3px; color:#e2e8f0; font-size:11px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ai-quick-products { display:grid; gap:7px; }
+        .ai-quick-product { display:grid; grid-template-columns:minmax(0,1fr) 110px 150px; gap:8px; align-items:center; border:1px solid rgba(148,163,184,.14); border-radius:8px; padding:8px 10px; background:rgba(8,19,38,.58); font-size:12px; }
+        .ai-quick-product strong { color:#f8fafc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .ai-quick-product span { color:#cbd5e1; }
+        .ai-quick-product .ok { color:#86efac; }
+        .ai-quick-product .warn { color:#fde68a; }
+        .ai-quick-product .bad { color:#fecaca; }
+        .ai-modal-backdrop {
+            position:fixed; inset:0; z-index:2400; display:none; background:rgba(2,8,23,.78);
+            backdrop-filter:blur(4px);
+        }
+        .ai-modal-backdrop.show { display:block; }
+        .ai-review-modal, .ai-edit-modal {
+            position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
+            z-index:2401; display:none; width:min(760px, calc(100vw - 28px)); max-height:88vh; overflow:auto;
+            border:1px solid rgba(14,165,233,.32); border-radius:12px; background:#0b1222;
+            box-shadow:0 30px 90px rgba(0,0,0,.64);
+        }
+        .ai-edit-modal { width:min(1080px, calc(100vw - 28px)); }
+        .ai-review-modal.show, .ai-edit-modal.show { display:block; }
+        .ai-modal-header {
+            display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+            padding:14px 16px; border-bottom:1px solid #1e293b;
+        }
+        .ai-modal-header h5 { margin:0; color:#f8fafc; font-size:15px; font-weight:900; }
+        .ai-modal-header p { margin:4px 0 0; color:#9fb6d3; font-size:12px; }
+        .ai-modal-close {
+            width:34px; height:34px; border-radius:8px; border:1px solid #334155;
+            background:#1e293b; color:#e2e8f0; display:inline-flex; align-items:center; justify-content:center;
+        }
+        .ai-modal-body { padding:14px 16px 16px; }
+        .ai-modal-actions {
+            display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:flex-start;
+            margin-top:14px; padding-top:12px; border-top:1px solid rgba(30,41,59,.8);
+        }
+        .ai-modal-actions .edit-away { margin-left:auto; }
+        .ai-modal-actions .cancel-away { background:#475569; color:#e2e8f0; border:0; }
         .btn-ai {
             min-height:40px; border-radius:9px; padding:0 14px; border:1px solid rgba(125,211,252,.38);
             background:rgba(14,165,233,.14); color:#dff7ff; font-weight:900; font-size:12px;
@@ -2620,6 +2715,17 @@ function statusBadge(string $status): string {
         }
         .review-form { margin-top:16px; display:grid; gap:10px; }
         .review-form label { font-size:12px; color:#dbeafe; font-weight:700; }
+        .review-compact {
+            display:flex; align-items:center; justify-content:space-between; gap:10px;
+            margin-top:12px; padding:10px; border:1px solid rgba(148,163,184,.16);
+            border-radius:9px; background:rgba(8,19,38,.48);
+        }
+        .review-compact-info { min-width:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .review-compact-info strong { color:#e2e8f0; font-size:12px; }
+        .review-compact-actions { display:flex; align-items:center; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+        .review-note-preview {
+            color:#94a3b8; font-size:11px; max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+        }
         .status-pill {
             display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:800;
             border:1px solid transparent;
@@ -2641,39 +2747,6 @@ function statusBadge(string $status): string {
             color:#e2f3ff; font-weight:700; font-size:13px;
         }
         .mail-config-chip strong { color:#38bdf8; font-family:var(--font-mono); }
-        .channel-overview {
-            display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;
-            margin-bottom:16px;
-        }
-        .channel-card {
-            position:relative; overflow:hidden; min-height:118px;
-            border:1px solid #1e293b; border-radius:12px; padding:16px;
-            background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(8,18,35,.92));
-            display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
-        }
-        .channel-card::after {
-            content:''; position:absolute; right:-42px; top:-42px; width:120px; height:120px;
-            border-radius:50%; background:rgba(14,165,233,.10); pointer-events:none;
-        }
-        .channel-card.whatsapp::after { background:rgba(34,197,94,.12); }
-        .channel-copy { position:relative; z-index:1; min-width:0; }
-        .channel-kicker { color:#8aa4c2; font-size:11px; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
-        .channel-title { margin:5px 0 6px; font-size:16px; font-weight:900; color:#f8fafc; }
-        .channel-meta { display:flex; gap:8px; flex-wrap:wrap; color:#9fb6d3; font-size:12px; }
-        .channel-pill {
-            display:inline-flex; align-items:center; gap:6px; padding:5px 9px;
-            border-radius:999px; background:rgba(30,41,59,.82);
-            border:1px solid rgba(148,163,184,.22); color:#cbd5e1; font-size:11px; font-weight:800;
-        }
-        .channel-pill.ok { color:#86efac; border-color:rgba(16,185,129,.35); background:rgba(16,185,129,.12); }
-        .channel-pill.warn { color:#fcd34d; border-color:rgba(245,158,11,.35); background:rgba(245,158,11,.12); }
-        .channel-actions { position:relative; z-index:1; display:flex; flex-direction:column; gap:8px; align-items:flex-end; }
-        .channel-action-link {
-            min-height:36px; border-radius:9px; padding:0 12px; display:inline-flex; align-items:center; gap:8px;
-            text-decoration:none; color:#dff7ff; border:1px solid rgba(14,165,233,.42); background:rgba(14,165,233,.08);
-            font-size:12px; font-weight:800; white-space:nowrap;
-        }
-        .channel-action-link:hover { color:#fff; background:rgba(14,165,233,.16); }
         .mail-empty-state {
             margin-bottom:16px; border:1px solid rgba(245,158,11,.35); border-radius:12px;
             background:rgba(245,158,11,.08); padding:16px;
@@ -2754,7 +2827,6 @@ function statusBadge(string $status): string {
             padding:8px 10px; border:1px solid #1e293b; background:#0b1222; border-radius:9px;
         }
         @media (max-width: 980px) {
-            .channel-overview { grid-template-columns:1fr; }
             .mail-empty-state { flex-direction:column; align-items:flex-start; }
             .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
             .content-grid.mail-grid { grid-template-columns:1fr; }
@@ -2764,6 +2836,10 @@ function statusBadge(string $status): string {
             .mail-accounts-grid { grid-template-columns:1fr; }
             .mail-accounts-grid .wide,
             .mail-accounts-grid .full { grid-column:span 1; }
+            .mail-original-compact { grid-template-columns:1fr; }
+            .review-compact { align-items:flex-start; flex-direction:column; }
+            .review-compact-actions { width:100%; justify-content:flex-start; }
+            .review-note-preview { max-width:100%; }
             .ai-grid { grid-template-columns:1fr; }
             .ai-grid .full { grid-column:span 1; }
             .ai-product-row { grid-template-columns:1fr; }
@@ -2854,34 +2930,6 @@ function statusBadge(string $status): string {
             </section>
         <?php endif; ?>
 
-        <section class="channel-overview" aria-label="Canales vinculados">
-            <article class="channel-card">
-                <div class="channel-copy">
-                    <div class="channel-kicker">Correo operativo</div>
-                    <div class="channel-title">IMAP para lectura + SMTP para respuesta</div>
-                    <div class="channel-meta">
-                        <span class="channel-pill <?= $activeMailAccounts > 0 ? 'ok' : 'warn' ?>"><i class="fa-solid fa-inbox"></i> IMAP <?= $activeMailAccounts ?>/2</span>
-                        <span class="channel-pill <?= $activeSmtpAccounts > 0 ? 'ok' : 'warn' ?>"><i class="fa-solid fa-paper-plane"></i> SMTP <?= $activeSmtpAccounts ?>/<?= max(1, $activeMailAccounts) ?></span>
-                    </div>
-                </div>
-                <div class="channel-actions">
-                    <button class="channel-action-link" type="button" id="openMailAccountsModalFromCard"><i class="fa-solid fa-gear"></i> Configurar</button>
-                </div>
-            </article>
-            <article class="channel-card whatsapp">
-                <div class="channel-copy">
-                    <div class="channel-kicker">Canal alterno</div>
-                    <div class="channel-title">WhatsApp vinculado a OpenWA</div>
-                    <div class="channel-meta" id="whatsappChannelStatus">
-                        <span class="channel-pill warn"><i class="fa-solid fa-circle-notch fa-spin"></i> Revisando conexion</span>
-                    </div>
-                </div>
-                <div class="channel-actions">
-                    <a class="channel-action-link" href="../whatsapp.php"><i class="fa-brands fa-whatsapp"></i> Abrir WhatsApp</a>
-                </div>
-            </article>
-        </section>
-
         <section class="metrics">
             <article class="metric"><div><h4><?= $metrics['today'] ?></h4><small>Correos hoy</small></div><div class="metric-icon"><i class="fa-solid fa-inbox"></i></div></article>
             <article class="metric"><div><h4><?= $metrics['unseen'] ?></h4><small>No leidos</small></div><div class="metric-icon"><i class="fa-solid fa-envelope"></i></div></article>
@@ -2955,11 +3003,31 @@ function statusBadge(string $status): string {
                 </div>
             </article>
 
+            <?php
+                $selectedHasAiExtraction = $selected && (
+                    trim((string)($selected['ai_product'] ?? '')) !== ''
+                    || trim((string)($selected['ai_quantity'] ?? '')) !== ''
+                    || trim((string)($selected['ai_customer'] ?? '')) !== ''
+                    || trim((string)($selected['ai_observations'] ?? '')) !== ''
+                    || ($selected['ai_confidence'] ?? null) !== null
+                );
+                $selectedConfirmed = $selected && !empty($selected['confirmed_pedido_id']);
+            ?>
             <article class="mail-panel">
                 <div class="panel-header">
                     <div>
-                        <h3 class="panel-title">Detalle y Revision</h3>
-                        <p class="panel-subtitle">Preparado para extraccion con IA</p>
+                        <h3 class="panel-title"><?= $selected ? 'Correo seleccionado' : 'Detalle y Revision' ?></h3>
+                        <p class="panel-subtitle">
+                            <?php if (!$selected): ?>
+                                Preparado para extraccion con IA
+                            <?php elseif ($selectedConfirmed): ?>
+                                Pedido confirmado #<?= (int)$selected['confirmed_pedido_id'] ?>
+                            <?php elseif ($selectedHasAiExtraction): ?>
+                                Extraccion IA lista para revisar
+                            <?php else: ?>
+                                Listo para analizar con IA
+                            <?php endif; ?>
+                        </p>
                     </div>
                 </div>
                 <div class="mail-detail-content">
@@ -2968,13 +3036,43 @@ function statusBadge(string $status): string {
                         <?= $activeMailAccounts === 0 ? 'Vincula una cuenta para revisar correos.' : 'Selecciona un correo de la bandeja.' ?>
                     </p>
                 <?php else: ?>
-                    <div class="detail-table">
-                        <div class="detail-label">De</div><div class="detail-value"><?= htmlspecialchars((string)($selected['from_name'] ?: $selected['from_email'] ?: '-')) ?></div>
-                        <div class="detail-label">Asunto</div><div class="detail-value"><?= htmlspecialchars((string)($selected['subject'] ?: '(Sin asunto)')) ?></div>
-                        <div class="detail-label">Fecha</div><div class="detail-value"><?= htmlspecialchars((string)($selected['received_at'] ?: $selected['fetched_at'])) ?></div>
-                        <div class="detail-label">Message-ID</div><div class="detail-value"><span class="msg-id-chip"><?= htmlspecialchars((string)$selected['message_id']) ?></span></div>
+                    <?php
+                        $selectedSender = (string)($selected['from_name'] ?: $selected['from_email'] ?: '-');
+                        $selectedSubject = (string)($selected['subject'] ?: '(Sin asunto)');
+                        $selectedDate = (string)($selected['received_at'] ?: $selected['fetched_at']);
+                        $selectedBody = (string)($selected['body_text'] ?: strip_tags((string)$selected['body_html']) ?: '(Sin contenido legible)');
+                    ?>
+                    <div class="mail-original-compact">
+                        <div class="mail-original-meta">
+                            <span>De</span>
+                            <strong title="<?= htmlspecialchars($selectedSender) ?>"><?= htmlspecialchars($selectedSender) ?></strong>
+                        </div>
+                        <div class="mail-original-meta">
+                            <span>Asunto</span>
+                            <strong title="<?= htmlspecialchars($selectedSubject) ?>"><?= htmlspecialchars($selectedSubject) ?></strong>
+                        </div>
+                        <div class="mail-original-meta">
+                            <span>Fecha</span>
+                            <strong><?= htmlspecialchars($selectedDate) ?></strong>
+                        </div>
+                        <button class="btn-ai primary" type="button" id="openOriginalMailModal"><i class="fa-solid fa-envelope-open-text"></i> Ver correo</button>
                     </div>
-                    <div class="mail-body mb-3"><?= htmlspecialchars((string)($selected['body_text'] ?: strip_tags((string)$selected['body_html']) ?: '(Sin contenido legible)')) ?></div>
+                    <div class="mail-modal-backdrop" id="originalMailBackdrop"></div>
+                    <section class="mail-modal" id="originalMailModal" aria-hidden="true">
+                        <div class="mail-modal-header">
+                            <h3 class="mail-modal-title">Correo original</h3>
+                            <button class="mail-modal-close" type="button" id="closeOriginalMailModal"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="mail-modal-body">
+                            <div class="detail-table">
+                                <div class="detail-label">De</div><div class="detail-value"><?= htmlspecialchars($selectedSender) ?></div>
+                                <div class="detail-label">Asunto</div><div class="detail-value"><?= htmlspecialchars($selectedSubject) ?></div>
+                                <div class="detail-label">Fecha</div><div class="detail-value"><?= htmlspecialchars($selectedDate) ?></div>
+                                <div class="detail-label">Message-ID</div><div class="detail-value"><span class="msg-id-chip"><?= htmlspecialchars((string)$selected['message_id']) ?></span></div>
+                            </div>
+                            <div class="mail-original-body"><?= htmlspecialchars($selectedBody) ?></div>
+                        </div>
+                    </section>
 
                     <?php
                         $hasAiExtraction = trim((string)($selected['ai_product'] ?? '')) !== ''
@@ -2982,12 +3080,17 @@ function statusBadge(string $status): string {
                             || trim((string)($selected['ai_customer'] ?? '')) !== ''
                             || trim((string)($selected['ai_observations'] ?? '')) !== ''
                             || $selected['ai_confidence'] !== null;
+                        $isConfirmedOrder = !empty($selected['confirmed_pedido_id']);
                     ?>
                     <section class="ai-card">
                         <div class="ai-head">
                             <div>
                                 <h4 class="ai-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Prellenado inteligente con IA</h4>
-                                <p class="ai-subtitle">La IA solo propone datos. El administrador confirma, corrige o descarta.</p>
+                                <p class="ai-subtitle">
+                                    <?= $hasAiExtraction
+                                        ? 'La IA solo propone datos. El administrador confirma, corrige o descarta.'
+                                        : 'Extrae cliente, productos, entrega y stock sugerido.' ?>
+                                </p>
                             </div>
                             <span class="ai-badge">
                                 <i class="fa-solid fa-microchip"></i>
@@ -3003,9 +3106,19 @@ function statusBadge(string $status): string {
                                 <?= $hasAiExtraction ? 'Analizar de nuevo' : 'Analizar con IA' ?>
                             </button>
                             <?php if (!$hasAiExtraction): ?>
-                                <span class="ai-subtitle">Pendiente de extraccion. No se modifica inventario ni se crea pedido.</span>
+                                <span class="ai-subtitle">Sin prellenado. No se modifica inventario ni se crea pedido.</span>
                             <?php endif; ?>
                         </form>
+
+                        <?php if (!$hasAiExtraction): ?>
+                            <div class="ai-summary-row">
+                                <span class="ai-chip warn">Prellenado: pendiente</span>
+                                <span class="ai-chip <?= $isConfirmedOrder ? 'ok' : 'warn' ?>">
+                                    <?= $isConfirmedOrder ? 'Pedido confirmado #' . (int)$selected['confirmed_pedido_id'] : 'Pedido no confirmado' ?>
+                                </span>
+                                <span class="ai-chip warn">Inventario sin validar</span>
+                            </div>
+                        <?php endif; ?>
 
                         <?php if ($hasAiExtraction): ?>
                             <form method="post" class="js-ai-save-form">
@@ -3041,6 +3154,139 @@ function statusBadge(string $status): string {
                                         <?php endforeach; ?>
                                     </div>
                                 <?php endif; ?>
+                                <div class="ai-quick-review">
+                                    <div class="ai-quick-head">
+                                        <div>
+                                            <h5>Resumen del pedido detectado</h5>
+                                            <p>Vista compacta con los campos actuales y comparativa rapida de inventario.</p>
+                                        </div>
+                                        <?php if (!empty($selected['confirmed_pedido_id'])): ?>
+                                            <span class="ai-chip ok"><i class="fa-solid fa-receipt"></i> Confirmado</span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <table class="ai-compact-table">
+                                        <tbody>
+                                            <tr>
+                                                <th>Cliente</th>
+                                                <td><?= htmlspecialchars((string)($selected['ai_customer'] ?: 'Por definir')) ?></td>
+                                                <th>Entrega</th>
+                                                <td><?= htmlspecialchars((string)($selected['ai_delivery_date_value'] ?: $selected['ai_delivery_date'] ?: 'Por definir')) ?></td>
+                                                <th>Confianza</th>
+                                                <td><?= htmlspecialchars((string)($selected['ai_confidence'] ?? '')) ?><?= $selected['ai_confidence'] !== null ? '%' : 'Sin dato' ?></td>
+                                            </tr>
+                                            <tr>
+                                                <th>Categoria</th>
+                                                <td><?= htmlspecialchars((string)($selected['ai_category'] ?: 'sin_categoria')) ?></td>
+                                                <th>Estado IA</th>
+                                                <td><?= htmlspecialchars((string)($selected['ai_processing_status'] ?: 'requiere_revision')) ?></td>
+                                                <th>Stock</th>
+                                                <td class="<?= $stockClass === 'ok' ? 'ai-stock-ok' : ($stockClass === 'bad' ? 'ai-stock-bad' : 'ai-stock-warn') ?>"><?= htmlspecialchars($stockLabel) ?></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <table class="ai-compact-table ai-product-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Producto</th>
+                                                <th>Cant.</th>
+                                                <th>Stock</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        <?php foreach ($aiProducts as $idx => $item): ?>
+                                            <?php
+                                                $stockItem = $aiStockItems[$idx] ?? [];
+                                                $status = (string)($stockItem['status'] ?? '');
+                                                $stockTone = $status === 'cubre_completo' ? 'ok' : (in_array($status, ['parcial', 'sin_stock', 'producto_no_encontrado'], true) ? 'bad' : 'warn');
+                                                $stockText = 'Pendiente';
+                                                if ($status === 'cubre_completo') {
+                                                    $stockText = 'Cubre: ' . ($stockItem['stock_disponible'] ?? '-') . ' ' . ($stockItem['unidad_stock'] ?? '');
+                                                } elseif ($status === 'parcial') {
+                                                    $stockText = 'Faltan ' . ($stockItem['faltante'] ?? '-') . ' / Disp. ' . ($stockItem['stock_disponible'] ?? '-');
+                                                } elseif ($status === 'sin_stock') {
+                                                    $stockText = 'Sin stock';
+                                                } elseif ($status === 'producto_no_encontrado') {
+                                                    $stockText = 'No encontrado';
+                                                } elseif ($status === 'cantidad_faltante') {
+                                                    $stockText = 'Falta cantidad';
+                                                }
+                                            ?>
+                                            <tr>
+                                                <td class="product-name" title="<?= htmlspecialchars(aiText($item['producto'] ?? 'Producto sin nombre')) ?>"><?= htmlspecialchars(aiText($item['producto'] ?? 'Producto sin nombre')) ?></td>
+                                                <td><?= htmlspecialchars(aiText($item['cantidad_texto'] ?? ($item['cantidad'] ?? ''))) ?> <?= htmlspecialchars(aiText($item['unidad'] ?? '')) ?></td>
+                                                <td class="<?= $stockTone === 'ok' ? 'ai-stock-ok' : ($stockTone === 'bad' ? 'ai-stock-bad' : 'ai-stock-warn') ?>"><?= htmlspecialchars($stockText) ?></td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                    <?php if (trim((string)($selected['ai_observations'] ?? '')) !== ''): ?>
+                                        <div class="ai-quick-item">
+                                            <span class="ai-quick-label">Observaciones</span>
+                                            <span class="ai-quick-value"><?= htmlspecialchars((string)$selected['ai_observations']) ?></span>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                    <div class="ai-modal-backdrop js-ai-modal-backdrop"></div>
+                                    <section class="ai-review-modal js-ai-review-modal" aria-hidden="true">
+                                        <div class="ai-modal-header">
+                                            <div>
+                                                <h5>Confirmar pedido extraido por IA</h5>
+                                                <p>Si todo esta bien, acepta. Si algo esta mal, edita los campos completos.</p>
+                                            </div>
+                                            <button class="ai-modal-close js-close-ai-modal" type="button"><i class="fa-solid fa-xmark"></i></button>
+                                        </div>
+                                        <div class="ai-modal-body">
+                                            <div class="ai-summary-row">
+                                                <span class="ai-chip <?= ((int)($selected['ai_is_order'] ?? 0) === 1) ? 'ok' : 'warn' ?>">Pedido: <?= ((int)($selected['ai_is_order'] ?? 0) === 1) ? 'Si' : 'Por confirmar' ?></span>
+                                                <span class="ai-chip"><?= htmlspecialchars((string)($selected['ai_category'] ?? 'sin_categoria')) ?></span>
+                                                <span class="ai-chip"><?= htmlspecialchars((string)($selected['ai_processing_status'] ?? 'requiere_revision')) ?></span>
+                                                <span class="ai-chip <?= $stockClass ?>"><?= htmlspecialchars($stockLabel) ?></span>
+                                            </div>
+                                            <div class="ai-quick-products">
+                                                <?php foreach ($aiProducts as $idx => $item): ?>
+                                                    <?php
+                                                        $stockItem = $aiStockItems[$idx] ?? [];
+                                                        $status = (string)($stockItem['status'] ?? '');
+                                                        $stockTone = $status === 'cubre_completo' ? 'ok' : (in_array($status, ['parcial', 'sin_stock', 'producto_no_encontrado'], true) ? 'bad' : 'warn');
+                                                        $stockText = $status === 'cubre_completo'
+                                                            ? 'Cubre: ' . ($stockItem['stock_disponible'] ?? '-') . ' ' . ($stockItem['unidad_stock'] ?? '')
+                                                            : ($status === 'parcial' ? 'Faltan ' . ($stockItem['faltante'] ?? '-') . ' / Disp. ' . ($stockItem['stock_disponible'] ?? '-') : ($status ?: 'Pendiente'));
+                                                    ?>
+                                                    <div class="ai-quick-product">
+                                                        <strong><?= htmlspecialchars(aiText($item['producto'] ?? 'Producto sin nombre')) ?></strong>
+                                                        <span><?= htmlspecialchars(aiText($item['cantidad_texto'] ?? ($item['cantidad'] ?? ''))) ?> <?= htmlspecialchars(aiText($item['unidad'] ?? '')) ?></span>
+                                                        <span class="<?= $stockTone ?>"><?= htmlspecialchars($stockText) ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            <div class="ai-modal-actions">
+                                                <?php if (!empty($selected['confirmed_pedido_id'])): ?>
+                                                    <span class="ai-chip ok"><i class="fa-solid fa-receipt"></i> Pedido confirmado #<?= (int)$selected['confirmed_pedido_id'] ?></span>
+                                                    <button class="btn-ai edit-away js-open-ai-edit" type="button"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                                                    <button
+                                                        class="btn-ai confirm js-resend-confirmation-btn"
+                                                        name="ai_decision"
+                                                        value="resend_confirmation"
+                                                        type="submit"
+                                                        onclick="return confirm('Se reenviara el correo de confirmacion sin crear otro pedido ni descontar inventario. Continuar?');"
+                                                    ><i class="fa-solid fa-paper-plane"></i> Reenviar correo</button>
+                                                <?php else: ?>
+                                                    <button class="btn-ai confirm js-confirm-order-btn" name="ai_decision" value="confirm_order" type="submit"><i class="fa-solid fa-check"></i> Aceptar</button>
+                                                    <button class="btn-ai cancel-away" name="ai_decision" value="discard" type="submit"><i class="fa-solid fa-ban"></i> Cancelar</button>
+                                                    <button class="btn-ai edit-away js-open-ai-edit" type="button"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </section>
+                                <section class="ai-edit-modal js-ai-edit-modal" aria-hidden="true">
+                                    <div class="ai-modal-header">
+                                        <div>
+                                            <h5>Editar extraccion completa</h5>
+                                            <p>Estos son los mismos campos actuales; corrige lo necesario y guarda o confirma.</p>
+                                        </div>
+                                        <button class="ai-modal-close js-close-ai-modal" type="button"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                    <div class="ai-modal-body">
                                 <div class="ai-products">
                                     <?php foreach ($aiProducts as $idx => $item): ?>
                                         <?php
@@ -3179,6 +3425,7 @@ function statusBadge(string $status): string {
                                         <div class="ai-alert"><i class="fa-solid fa-triangle-exclamation"></i> <?= htmlspecialchars((string)$selected['confirmation_email_error']) ?></div>
                                     <?php endif; ?>
                                     <div class="ai-actions">
+                                        <button class="btn-ai" name="ai_decision" value="save" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar correcciones</button>
                                         <button
                                             class="btn-ai confirm js-resend-confirmation-btn"
                                             name="ai_decision"
@@ -3201,29 +3448,63 @@ function statusBadge(string $status): string {
                                         <button class="btn-ai discard" name="ai_decision" value="discard" type="submit"><i class="fa-solid fa-ban"></i> Descartar</button>
                                     </div>
                                 <?php endif; ?>
+                                    </div>
+                                </section>
                             </form>
                         <?php endif; ?>
                     </section>
 
-                    <form method="post" class="review-form">
-                        <input type="hidden" name="action" value="update_review">
-                        <input type="hidden" name="id" value="<?= (int)$selected['id'] ?>">
-                        <label>Estado de revision</label>
-                        <select class="form-select review-select" name="review_status">
-                            <?php $currentStatus = (string)($selected['review_status'] ?: 'pendiente'); ?>
-                            <option value="pendiente" <?= $currentStatus==='pendiente' ? 'selected' : '' ?>>Pendiente</option>
-                            <option value="candidato_pedido" <?= $currentStatus==='candidato_pedido' ? 'selected' : '' ?>>Candidato a pedido</option>
-                            <option value="revisado" <?= $currentStatus==='revisado' ? 'selected' : '' ?>>Revisado</option>
-                            <option value="descartado" <?= $currentStatus==='descartado' ? 'selected' : '' ?>>Descartado</option>
-                        </select>
-                        <label>Nota operativa</label>
-                        <textarea class="form-control review-note" name="review_note" rows="4" placeholder="Ej: solicitar validacion inventario, confirmar tonelaje, etc."><?= htmlspecialchars((string)($selected['review_note'] ?? '')) ?></textarea>
-                        <div class="check-inline">
-                            <input type="checkbox" id="markSeen" name="mark_seen" value="1" <?= (int)$selected['is_unseen'] === 0 ? 'checked' : '' ?>>
-                            <label for="markSeen">Marcar como leido</label>
+                    <?php $currentStatus = (string)($selected['review_status'] ?: 'pendiente'); ?>
+                    <div class="review-compact">
+                        <div class="review-compact-info">
+                            <strong>Acciones de revision:</strong>
+                            <span class="<?= statusBadge($currentStatus) ?>"><?= htmlspecialchars($currentStatus) ?></span>
+                            <span class="<?= (int)$selected['is_unseen'] === 0 ? 'status-pill status-ok' : 'status-pill status-pending' ?>">
+                                <?= (int)$selected['is_unseen'] === 0 ? 'Leido' : 'No leido' ?>
+                            </span>
+                            <?php if (trim((string)($selected['review_note'] ?? '')) !== ''): ?>
+                                <span class="review-note-preview"><?= htmlspecialchars((string)$selected['review_note']) ?></span>
+                            <?php endif; ?>
                         </div>
-                        <button class="btn-main" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar revision</button>
-                    </form>
+                        <div class="review-compact-actions">
+                            <?php if (!empty($selected['confirmed_pedido_id'])): ?>
+                                <span class="ai-chip ok"><i class="fa-solid fa-receipt"></i> Confirmado</span>
+                            <?php endif; ?>
+                            <?php if ($hasAiExtraction): ?>
+                                <button class="btn-ai primary js-open-ai-review" type="button"><i class="fa-solid fa-clipboard-check"></i> Revisar pedido</button>
+                            <?php else: ?>
+                                <span class="ai-chip warn">Sin prellenado IA</span>
+                            <?php endif; ?>
+                            <button class="btn-ai" type="button" id="openReviewStatusModal"><i class="fa-solid fa-pen-to-square"></i> Editar estado</button>
+                        </div>
+                    </div>
+                    <div class="mail-modal-backdrop" id="reviewStatusBackdrop"></div>
+                    <section class="mail-modal" id="reviewStatusModal" aria-hidden="true">
+                        <div class="mail-modal-header">
+                            <h3 class="mail-modal-title">Editar estado de revision</h3>
+                            <button class="mail-modal-close" type="button" id="closeReviewStatusModal"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="mail-modal-body">
+                            <form method="post" class="review-form">
+                                <input type="hidden" name="action" value="update_review">
+                                <input type="hidden" name="id" value="<?= (int)$selected['id'] ?>">
+                                <label>Estado de revision</label>
+                                <select class="form-select review-select" name="review_status">
+                                    <option value="pendiente" <?= $currentStatus==='pendiente' ? 'selected' : '' ?>>Pendiente</option>
+                                    <option value="candidato_pedido" <?= $currentStatus==='candidato_pedido' ? 'selected' : '' ?>>Candidato a pedido</option>
+                                    <option value="revisado" <?= $currentStatus==='revisado' ? 'selected' : '' ?>>Revisado</option>
+                                    <option value="descartado" <?= $currentStatus==='descartado' ? 'selected' : '' ?>>Descartado</option>
+                                </select>
+                                <label>Nota operativa</label>
+                                <textarea class="form-control review-note" name="review_note" rows="4" placeholder="Ej: solicitar validacion inventario, confirmar tonelaje, etc."><?= htmlspecialchars((string)($selected['review_note'] ?? '')) ?></textarea>
+                                <div class="check-inline">
+                                    <input type="checkbox" id="markSeen" name="mark_seen" value="1" <?= (int)$selected['is_unseen'] === 0 ? 'checked' : '' ?>>
+                                    <label for="markSeen">Marcar como leido</label>
+                                </div>
+                                <button class="btn-main" type="submit"><i class="fa-solid fa-floppy-disk"></i> Guardar revision</button>
+                            </form>
+                        </div>
+                    </section>
                 <?php endif; ?>
                 </div>
             </article>
@@ -3475,6 +3756,109 @@ function statusBadge(string $status): string {
 
     forms.forEach((form) => {
         form.addEventListener('submit', () => showAiLoading(form));
+    });
+})();
+
+(() => {
+    const openBtn = document.getElementById('openReviewStatusModal');
+    const closeBtn = document.getElementById('closeReviewStatusModal');
+    const modal = document.getElementById('reviewStatusModal');
+    const backdrop = document.getElementById('reviewStatusBackdrop');
+    if (!openBtn || !closeBtn || !modal || !backdrop) return;
+
+    const openModal = () => {
+        modal.classList.add('show');
+        backdrop.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    };
+    const closeModal = () => {
+        modal.classList.remove('show');
+        backdrop.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    };
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeModal();
+    });
+})();
+
+(() => {
+    const openBtn = document.getElementById('openOriginalMailModal');
+    const closeBtn = document.getElementById('closeOriginalMailModal');
+    const modal = document.getElementById('originalMailModal');
+    const backdrop = document.getElementById('originalMailBackdrop');
+    if (!openBtn || !closeBtn || !modal || !backdrop) return;
+
+    const openModal = () => {
+        modal.classList.add('show');
+        backdrop.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    };
+    const closeModal = () => {
+        modal.classList.remove('show');
+        backdrop.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    };
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeModal();
+    });
+})();
+
+(() => {
+    document.querySelectorAll('.js-ai-save-form').forEach((form) => {
+        const backdrop = form.querySelector('.js-ai-modal-backdrop');
+        const reviewModal = form.querySelector('.js-ai-review-modal');
+        const editModal = form.querySelector('.js-ai-edit-modal');
+        const openEditBtns = form.querySelectorAll('.js-open-ai-edit');
+        const closeBtns = form.querySelectorAll('.js-close-ai-modal');
+        if (!backdrop || !reviewModal) return;
+
+        const closeAll = () => {
+            backdrop.classList.remove('show');
+            reviewModal.classList.remove('show');
+            editModal?.classList.remove('show');
+            reviewModal.setAttribute('aria-hidden', 'true');
+            editModal?.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = '';
+        };
+        const openReview = () => {
+            backdrop.classList.add('show');
+            reviewModal.classList.add('show');
+            editModal?.classList.remove('show');
+            reviewModal.setAttribute('aria-hidden', 'false');
+            editModal?.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = 'hidden';
+        };
+        const openEdit = () => {
+            backdrop.classList.add('show');
+            reviewModal.classList.remove('show');
+            editModal?.classList.add('show');
+            reviewModal.setAttribute('aria-hidden', 'true');
+            editModal?.setAttribute('aria-hidden', 'false');
+            document.body.style.overflow = 'hidden';
+        };
+
+        const panel = form.closest('.mail-panel') || document;
+        panel.querySelectorAll('.js-open-ai-review').forEach((button) => {
+            button.addEventListener('click', openReview);
+        });
+        openEditBtns.forEach((button) => button.addEventListener('click', openEdit));
+        closeBtns.forEach((button) => button.addEventListener('click', closeAll));
+        backdrop.addEventListener('click', closeAll);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeAll();
+        });
     });
 })();
 
