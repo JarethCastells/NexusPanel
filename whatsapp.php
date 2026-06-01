@@ -536,7 +536,41 @@ if (isset($_GET['action'])) {
 
         /* Right chat panel */
         .wa-chat { display:flex; flex-direction:column; min-height:0; border:1px solid rgba(255,255,255,0.08); background:rgba(10,20,35,0.55); backdrop-filter:blur(16px); border-radius:18px; overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
-        .wa-chat-head { flex-shrink:0; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; gap:10px; background:rgba(0,0,0,0.1); }
+        .wa-chat-head { flex-shrink:0; padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; justify-content:space-between; gap:8px; background:linear-gradient(135deg, rgba(0,0,0,0.2) 0%, rgba(0,20,40,0.15) 100%); }
+
+        /* Header icon-only action buttons */
+        .wa-head-btn { position:relative; display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:50%; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#94a3b8; font-size:13px; cursor:pointer; transition:all .18s cubic-bezier(.4,0,.2,1); }
+        .wa-head-btn:hover { background:rgba(0,212,255,0.12); border-color:rgba(0,212,255,0.35); color:#67e8f9; transform:translateY(-1px); box-shadow:0 4px 12px rgba(0,212,255,0.15); }
+        .wa-head-btn:active { transform:translateY(0); }
+        .wa-head-btn.active { background:rgba(0,212,255,0.18); border-color:rgba(0,212,255,0.5); color:#00d4ff; box-shadow:0 0 0 3px rgba(0,212,255,0.12); }
+        .wa-head-btn:disabled { opacity:0.35; cursor:not-allowed; transform:none; box-shadow:none; }
+        /* Session control pill buttons */
+        .wa-sess-btn { display:inline-flex; align-items:center; gap:5px; padding:5px 11px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.3px; border:1px solid; cursor:pointer; transition:all .18s cubic-bezier(.4,0,.2,1); white-space:nowrap; }
+        .wa-sess-btn:disabled { opacity:.35; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
+        .wa-sess-btn-start { background:rgba(16,185,129,0.1); border-color:rgba(16,185,129,0.3); color:#86efac; }
+        .wa-sess-btn-start:not(:disabled):hover { background:rgba(16,185,129,0.22); border-color:#10b981; color:#4ade80; transform:translateY(-1px); box-shadow:0 4px 12px rgba(16,185,129,0.2); }
+        .wa-sess-btn-stop { background:rgba(245,158,11,0.1); border-color:rgba(245,158,11,0.3); color:#fcd34d; }
+        .wa-sess-btn-stop:not(:disabled):hover { background:rgba(245,158,11,0.22); border-color:#f59e0b; color:#fbbf24; transform:translateY(-1px); box-shadow:0 4px 12px rgba(245,158,11,0.2); }
+        .wa-sess-btn-logout { background:rgba(239,68,68,0.1); border-color:rgba(239,68,68,0.3); color:#fca5a5; }
+        .wa-sess-btn-logout:not(:disabled):hover { background:rgba(239,68,68,0.22); border-color:#ef4444; color:#f87171; transform:translateY(-1px); box-shadow:0 4px 12px rgba(239,68,68,0.2); }
+        /* Divider between search btn and session controls */
+        .wa-head-divider { width:1px; height:22px; background:rgba(255,255,255,0.1); flex-shrink:0; }
+
+        /* Message search bar */
+        .wa-search-bar { flex-shrink:0; display:flex; align-items:center; gap:10px; padding:0 16px; max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.4,0,.2,1), padding .3s cubic-bezier(.4,0,.2,1); border-bottom:1px solid transparent; background:linear-gradient(135deg,rgba(0,212,255,0.04) 0%,rgba(0,20,40,0.08) 100%); }
+        .wa-search-bar.open { max-height:58px; padding:9px 16px; border-bottom-color:rgba(0,212,255,0.12); }
+        .wa-search-bar input { flex:1; background:rgba(0,0,0,0.3); border:1.5px solid rgba(0,212,255,0.18); border-radius:999px; padding:8px 18px; color:#f8fafc; font-size:13px; outline:none; transition:border-color .2s, box-shadow .2s, background .2s; }
+        .wa-search-bar input:focus { background:rgba(0,0,0,0.4); border-color:rgba(0,212,255,0.6); box-shadow:0 0 0 3px rgba(0,212,255,0.1); }
+        .wa-search-bar input::placeholder { color:rgba(255,255,255,0.25); font-style:italic; }
+        .wa-search-nav { display:flex; align-items:center; gap:4px; flex-shrink:0; }
+        .wa-search-count { font-size:11px; color:#64748b; min-width:48px; text-align:center; padding:0 4px; font-variant-numeric:tabular-nums; }
+        .wa-search-nav button { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); color:#64748b; border-radius:7px; width:27px; height:27px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; font-size:11px; }
+        .wa-search-nav button:hover { background:rgba(0,212,255,0.12); border-color:rgba(0,212,255,0.35); color:#67e8f9; }
+        .wa-search-close { background:none; border:none; color:#475569; cursor:pointer; padding:5px 7px; font-size:15px; border-radius:50%; transition:all .15s; display:flex; align-items:center; }
+        .wa-search-close:hover { background:rgba(239,68,68,0.12); color:#f87171; }
+        mark.wa-highlight { background:rgba(250,204,21,0.28); color:#fef08a; border-radius:3px; padding:0 2px; transition:background .15s; }
+        mark.wa-highlight.wa-current { background:rgba(250,204,21,0.75); color:#1c1917; font-weight:700; box-shadow:0 0 0 2px rgba(250,204,21,0.4); }
+
         .wa-chat-body { flex:1; overflow-y:auto; display:flex; flex-direction:column-reverse; gap:10px; padding:14px; min-height:0; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.15) transparent; }
         .wa-compose { flex-shrink:0; padding:10px 14px; border-top:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:10px; background:rgba(0,0,0,0.1); }
         .wa-compose input { border-radius:999px; padding:9px 18px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.2); color:#fff; transition:all .2s; flex:1; min-width:0; }
@@ -708,17 +742,52 @@ if (isset($_GET['action'])) {
 
             <section class="wa-chat">
                 <div class="wa-chat-head">
-                    <div style="min-width:0;">
-                        <h3 class="wa-title" id="chatTitle">Mensajes de WhatsApp</h3>
+                    <!-- Contact info -->
+                    <div style="min-width:0; flex:1;">
+                        <h3 class="wa-title" id="chatTitle" style="font-size:14px;">Mensajes de WhatsApp</h3>
                         <p class="wa-muted" id="chatSubtitle">Selecciona una sesion y una conversacion.</p>
                     </div>
-                    <div class="wa-row" style="flex-shrink:0; gap:8px;">
-                        <button class="btn-secondary-custom" type="button" id="startSessionBtn" disabled style="font-size:12px; padding:6px 12px;"><i class="fa-solid fa-play"></i> Iniciar</button>
-                        <button class="btn-secondary-custom" type="button" id="stopSessionBtn" disabled style="font-size:12px; padding:6px 12px;"><i class="fa-solid fa-power-off"></i> Cerrar</button>
-                        <button class="btn-danger-custom" type="button" id="logoutSessionBtn" disabled><i class="fa-solid fa-link-slash"></i> Desvincular</button>
+
+                    <!-- Action buttons -->
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+
+                        <!-- Search toggle -->
+                        <button class="wa-head-btn" type="button" id="searchToggleBtn" title="Buscar en la conversación">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+
+                        <div class="wa-head-divider"></div>
+
+                        <!-- Session controls -->
+                        <button class="wa-sess-btn wa-sess-btn-start" type="button" id="startSessionBtn" disabled title="Iniciar sesión">
+                            <i class="fa-solid fa-play" style="font-size:10px;"></i> Iniciar
+                        </button>
+                        <button class="wa-sess-btn wa-sess-btn-stop" type="button" id="stopSessionBtn" disabled title="Cerrar sesión">
+                            <i class="fa-solid fa-power-off" style="font-size:10px;"></i> Cerrar
+                        </button>
+                        <button class="wa-sess-btn wa-sess-btn-logout" type="button" id="logoutSessionBtn" disabled title="Desvincular dispositivo">
+                            <i class="fa-solid fa-link-slash" style="font-size:10px;"></i> Desvincular
+                        </button>
+
+                        <div class="wa-head-divider"></div>
+
+                        <!-- Status badge -->
                         <span class="wa-status" id="sessionStatus">sin sesion</span>
                     </div>
                 </div>
+
+                <!-- Message Search Bar -->
+                <div class="wa-search-bar" id="msgSearchBar">
+                    <i class="fa-solid fa-magnifying-glass" style="color:rgba(0,212,255,0.6); font-size:13px; flex-shrink:0;"></i>
+                    <input type="text" id="msgSearchInput" placeholder="Buscar mensajes en esta conversación..." autocomplete="off">
+                    <div class="wa-search-nav">
+                        <span class="wa-search-count" id="msgSearchCount"></span>
+                        <button type="button" id="msgSearchPrev" title="Resultado anterior (Shift+Enter)"><i class="fa-solid fa-chevron-up"></i></button>
+                        <button type="button" id="msgSearchNext" title="Siguiente resultado (Enter)"><i class="fa-solid fa-chevron-down"></i></button>
+                    </div>
+                    <button class="wa-search-close" type="button" id="msgSearchClose" title="Cerrar búsqueda (Esc)"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <div id="chatBodyLoader" style="height:3px; width:100%; background:rgba(0,212,255,0.1); position:relative; overflow:hidden; flex-shrink:0; display:none;">
                     <div id="chatBodyProgressBar" style="height:100%; width:0%; background:#00d4ff; border-radius:3px;"></div>
                 </div>
@@ -818,17 +887,20 @@ async function refreshSelectedSession() {
         sessions = Array.isArray(data) ? data : [];
         const updated = sessions.find(s => s.id === selectedSession.id);
         if (updated) {
-            const wasReady = ['ready','connected'].includes(String(selectedSession.status || '').toLowerCase());
-            const isReady = ['ready','connected'].includes(String(updated.status || '').toLowerCase());
+            const prevStatus = String(selectedSession.status || '').toLowerCase();
+            const newStatus  = String(updated.status || '').toLowerCase();
+            const wasReady   = ['ready','connected'].includes(prevStatus);
+            const isNowReady = ['ready','connected'].includes(newStatus);
             
             selectedSession = updated;
             renderSessions();
             setStatus(selectedSession);
             
-            if (!wasReady && isReady) {
-                // If it just became ready, load avatars
+            if (!wasReady && isNowReady) {
+                // Just connected → load everything and ensure polling is running
                 loadAvatars();
-                loadChatList();
+                await loadChatList();
+                if (!msgPollTimer) startPolling();
             }
         }
     } catch (_) {
@@ -1909,16 +1981,33 @@ async function loadMessages(force) {
     }
 }
 
+let sessionPollTimer = null;  // poll session status every 5s to detect connect/disconnect
+
 function startPolling() {
     stopPolling();
     if (!selectedSession) return;
-    // Fast poll: refresh current chat messages every 3s
+
+    // ── Fast poll (3s): refresh messages + detect session status changes ──
     msgPollTimer = setInterval(async () => {
-        // Fast poll: update current chat messages
-        await loadCurrentChatMessages();
+        // Always check session status first to detect QR→ready transitions
+        const prevStatus = String(selectedSession?.status || '').toLowerCase();
+        const wasReady   = ['ready','connected'].includes(prevStatus);
         
-        // Fast poll: update the side chat list using the fast database instead of the heavy engine
-        if (selectedSession && ['ready','connected'].includes(String(selectedSession.status || '').toLowerCase())) {
+        await refreshSelectedSession();
+        
+        const nowStatus = String(selectedSession?.status || '').toLowerCase();
+        const isReady   = ['ready','connected'].includes(nowStatus);
+
+        // Just became ready → load chats immediately
+        if (!wasReady && isReady) {
+            await loadMessages(true);
+            return;
+        }
+
+        // Already ready → update messages and sidebar
+        if (isReady) {
+            await loadCurrentChatMessages();
+            
             try {
                 const globalMsgs = await loadDbMessages('');
                 if (globalMsgs && globalMsgs.length > 0) {
@@ -1939,17 +2028,20 @@ function startPolling() {
             } catch(e){}
         }
     }, 3000);
-    // Slow poll: refresh full chat list every 5 minutes to prevent overloading WhatsApp Web engine
+
+    // ── Slow poll (30s): full chat list refresh ──
     chatListPollTimer = setInterval(async () => {
-        await loadChatList();
-    }, 300000);
+        if (selectedSession && ['ready','connected'].includes(String(selectedSession.status || '').toLowerCase())) {
+            await loadChatList();
+        }
+    }, 30000);
 }
 
 function stopPolling() {
-    if (msgPollTimer) { clearInterval(msgPollTimer); msgPollTimer = null; }
-    if (chatListPollTimer) { clearInterval(chatListPollTimer); chatListPollTimer = null; }
-    // legacy
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (msgPollTimer)     { clearInterval(msgPollTimer);     msgPollTimer = null; }
+    if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null; }
+    if (chatListPollTimer){ clearInterval(chatListPollTimer);chatListPollTimer = null; }
+    if (pollTimer)        { clearInterval(pollTimer);        pollTimer = null; }
 }
 
 
@@ -2276,9 +2368,203 @@ function stopRecording(cancel = false) {
 $('recordBtn').addEventListener('click', startRecording);
 $('cancelRecordBtn').addEventListener('click', () => stopRecording(true));
 
+// ── Message Search ──────────────────────────────────────────────────────────
+(function() {
+    const searchBar   = $('msgSearchBar');
+    const searchInput = $('msgSearchInput');
+    const searchCount = $('msgSearchCount');
+    const toggleBtn   = $('searchToggleBtn');
+    const closeBtn    = $('msgSearchClose');
+    const prevBtn     = $('msgSearchPrev');
+    const nextBtn     = $('msgSearchNext');
+
+    let matches      = [];   // list of <mark> elements currently highlighted
+    let currentIndex = -1;
+
+    function openSearch() {
+        searchBar.classList.add('open');
+        searchInput.focus();
+        toggleBtn.classList.add('active');
+    }
+
+    function closeSearch() {
+        searchBar.classList.remove('open');
+        searchInput.value = '';
+        clearHighlights();
+        searchCount.textContent = '';
+        toggleBtn.classList.remove('active');
+    }
+
+    function clearHighlights() {
+        const chatBody = $('chatBody');
+        // Restore each highlighted <mark> to its text node
+        chatBody.querySelectorAll('mark.wa-highlight').forEach(mark => {
+            const parent = mark.parentNode;
+            parent.replaceChild(document.createTextNode(mark.textContent), mark);
+            parent.normalize();
+        });
+        matches = [];
+        currentIndex = -1;
+    }
+
+    function escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function highlightMatches(query) {
+        clearHighlights();
+        if (!query) { searchCount.textContent = ''; return; }
+
+        const chatBody = $('chatBody');
+        const regex    = new RegExp(`(${escapeRegex(query)})`, 'gi');
+
+        // Walk text nodes inside message bubbles only
+        const walker = document.createTreeWalker(
+            chatBody,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode(node) {
+                    // Skip nodes inside script, style, button, time tags
+                    const tag = node.parentElement?.tagName?.toUpperCase();
+                    if (['SCRIPT','STYLE','BUTTON','TIME','INPUT'].includes(tag)) return NodeFilter.FILTER_REJECT;
+                    return regex.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP;
+                }
+            }
+        );
+
+        const nodesToWrap = [];
+        let n;
+        while ((n = walker.nextNode())) nodesToWrap.push(n);
+
+        nodesToWrap.forEach(textNode => {
+            regex.lastIndex = 0;
+            const parts = textNode.nodeValue.split(regex);
+            if (parts.length <= 1) return;
+
+            const frag = document.createDocumentFragment();
+            parts.forEach(part => {
+                if (regex.test(part)) {
+                    regex.lastIndex = 0;
+                    const mark = document.createElement('mark');
+                    mark.className = 'wa-highlight';
+                    mark.textContent = part;
+                    frag.appendChild(mark);
+                    matches.push(mark);
+                } else {
+                    frag.appendChild(document.createTextNode(part));
+                }
+            });
+            textNode.parentNode.replaceChild(frag, textNode);
+        });
+
+        if (matches.length > 0) {
+            currentIndex = 0;
+            scrollToCurrent();
+        }
+        updateCount();
+    }
+
+    function scrollToCurrent() {
+        matches.forEach((m, i) => {
+            m.classList.toggle('wa-current', i === currentIndex);
+        });
+        if (matches[currentIndex]) {
+            matches[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function updateCount() {
+        if (matches.length === 0) {
+            searchCount.textContent = searchInput.value ? 'Sin resultados' : '';
+        } else {
+            searchCount.textContent = `${currentIndex + 1} / ${matches.length}`;
+        }
+    }
+
+    // Toggle open/close with lupa button
+    toggleBtn.addEventListener('click', () => {
+        if (searchBar.classList.contains('open')) {
+            closeSearch();
+        } else {
+            openSearch();
+        }
+    });
+
+    closeBtn.addEventListener('click', closeSearch);
+
+    // Keyboard: Escape closes, Enter navigates
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeSearch(); return; }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                goToPrev();
+            } else {
+                goToNext();
+            }
+        }
+    });
+
+    searchInput.addEventListener('input', () => {
+        highlightMatches(searchInput.value.trim());
+    });
+
+    function goToNext() {
+        if (!matches.length) return;
+        currentIndex = (currentIndex + 1) % matches.length;
+        scrollToCurrent();
+        updateCount();
+    }
+
+    function goToPrev() {
+        if (!matches.length) return;
+        currentIndex = (currentIndex - 1 + matches.length) % matches.length;
+        scrollToCurrent();
+        updateCount();
+    }
+
+    nextBtn.addEventListener('click', goToNext);
+    prevBtn.addEventListener('click', goToPrev);
+
+    // Re-run search after chat renders (messages change)
+    const origRenderChat = window.renderChat;
+    if (typeof origRenderChat === 'function') {
+        window.renderChat = function(...args) {
+            const result = origRenderChat.apply(this, args);
+            if (searchBar.classList.contains('open') && searchInput.value.trim()) {
+                setTimeout(() => highlightMatches(searchInput.value.trim()), 50);
+            }
+            return result;
+        };
+    }
+
+    // Also close search when chat changes
+    document.addEventListener('chatChanged', closeSearch);
+})();
+
 document.addEventListener('DOMContentLoaded', async () => {
     await loadSessions();
     startPolling();
+
+    // Global watcher: even with no selectedSession, keep checking for session state changes
+    // so the UI updates without F5 when WhatsApp connects after scanning QR.
+    setInterval(async () => {
+        if (selectedSession) return; // already handled by startPolling's 3s timer
+        try {
+            const data = await api('sessions', { timeoutMs: 4000 });
+            const list = Array.isArray(data) ? data : [];
+            if (!list.length) return;
+            const changed = list.some((s, i) => {
+                const old = sessions[i];
+                return !old || old.id !== s.id || old.status !== s.status;
+            });
+            if (changed) {
+                // Full reload so UI transitions correctly (e.g. qr→ready loads chats)
+                await loadSessions();
+                startPolling();
+            }
+        } catch(e) {}
+    }, 5000);
 });
 </script>
 
