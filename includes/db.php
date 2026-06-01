@@ -30,6 +30,7 @@ try {
     ensureNexusSchemaV2($pdo);
     ensureLogisticaMasivaSchema($pdo);
     ensureLogisticaInteligenteSchema($pdo);
+    ensureReporteGerencialLogisticaSchema($pdo);
     ensureEmailInboxSchema($pdo);
     ensureCatalogoClienteSeed($pdo);
 } catch (PDOException $e) {
@@ -1399,4 +1400,292 @@ function ensureLogisticaInteligenteSchema(PDO $pdo): void {
             ");
         }
     } catch (Throwable $e) {}
+}
+
+function ensureReporteGerencialLogisticaSchema(PDO $pdo): void {
+    static $ran = false;
+    if ($ran) return;
+    $ran = true;
+
+    try {
+        // Campos de pedido necesarios para reportes gerenciales.
+        if (tableExists($pdo, 'pedidos')) {
+            if (!columnExists($pdo, 'pedidos', 'folio_hex')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN folio_hex VARCHAR(12) NULL AFTER id");
+            }
+            if (!columnExists($pdo, 'pedidos', 'fecha_programada')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN fecha_programada DATETIME NULL AFTER updated_at");
+            }
+            if (!columnExists($pdo, 'pedidos', 'transporte_linea')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN transporte_linea VARCHAR(120) NULL AFTER fecha_programada");
+            }
+            if (!columnExists($pdo, 'pedidos', 'logistica_ruta_id')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN logistica_ruta_id INT NULL AFTER transporte_linea");
+            }
+            if (!columnExists($pdo, 'pedidos', 'ruta_origen')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN ruta_origen VARCHAR(120) NULL AFTER logistica_ruta_id");
+            }
+            if (!columnExists($pdo, 'pedidos', 'ruta_destino')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN ruta_destino VARCHAR(120) NULL AFTER ruta_origen");
+            }
+            if (!columnExists($pdo, 'pedidos', 'ruta_zona')) {
+                $pdo->exec("ALTER TABLE pedidos ADD COLUMN ruta_zona VARCHAR(80) NULL AFTER ruta_destino");
+            }
+            if (!indexExists($pdo, 'pedidos', 'idx_pedidos_transporte_linea')) {
+                $pdo->exec("CREATE INDEX idx_pedidos_transporte_linea ON pedidos(transporte_linea)");
+            }
+            if (!indexExists($pdo, 'pedidos', 'idx_pedidos_logistica_ruta')) {
+                $pdo->exec("CREATE INDEX idx_pedidos_logistica_ruta ON pedidos(logistica_ruta_id)");
+            }
+            $pdo->exec("UPDATE pedidos SET folio_hex = LPAD(UPPER(HEX(id)), 8, '0') WHERE folio_hex IS NULL OR folio_hex = ''");
+        }
+
+        // Ampliar catalogos logisticos existentes en vez de crear otro modelo paralelo.
+        if (tableExists($pdo, 'logistica_lineas')) {
+            if (!columnExists($pdo, 'logistica_lineas', 'dias_operacion')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN dias_operacion VARCHAR(80) NOT NULL DEFAULT 'Lunes a sabado' AFTER rastreo_tiempo_real");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'horario_carga')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN horario_carga VARCHAR(40) NOT NULL DEFAULT '08:00-18:00' AFTER dias_operacion");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'horario_entrega')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN horario_entrega VARCHAR(40) NOT NULL DEFAULT '09:00-19:00' AFTER horario_carga");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'tiempo_carga_descarga_min')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN tiempo_carga_descarga_min INT NOT NULL DEFAULT 60 AFTER horario_entrega");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'requiere_cita')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN requiere_cita TINYINT(1) NOT NULL DEFAULT 1 AFTER tiempo_carga_descarga_min");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'anticipacion_cita_hrs')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN anticipacion_cita_hrs INT NOT NULL DEFAULT 24 AFTER requiere_cita");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'costo_relativo')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN costo_relativo ENUM('bajo','medio','alto') NOT NULL DEFAULT 'medio' AFTER anticipacion_cita_hrs");
+            }
+            if (!columnExists($pdo, 'logistica_lineas', 'activo')) {
+                $pdo->exec("ALTER TABLE logistica_lineas ADD COLUMN activo TINYINT(1) NOT NULL DEFAULT 1 AFTER costo_relativo");
+            }
+        }
+
+        if (tableExists($pdo, 'logistica_rutas')) {
+            if (!columnExists($pdo, 'logistica_rutas', 'zona')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN zona VARCHAR(80) NULL AFTER destino");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'tipo_cobro')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN tipo_cobro VARCHAR(80) NOT NULL DEFAULT 'Ruta fija + peso' AFTER frecuencia");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'costo_km_adicional')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN costo_km_adicional DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER tarifa_fija");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'recargo_combustible')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN recargo_combustible DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER costo_km_adicional");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'recargo_maniobras')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN recargo_maniobras DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER recargo_combustible");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'recargo_zona_extendida')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN recargo_zona_extendida DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER recargo_maniobras");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'tiempo_min_hrs')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN tiempo_min_hrs INT NOT NULL DEFAULT 12 AFTER tiempo_estimado_hrs");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'tiempo_max_hrs')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN tiempo_max_hrs INT NOT NULL DEFAULT 48 AFTER tiempo_min_hrs");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'sla_hrs')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN sla_hrs INT NOT NULL DEFAULT 24 AFTER tiempo_max_hrs");
+            }
+            if (!columnExists($pdo, 'logistica_rutas', 'activo')) {
+                $pdo->exec("ALTER TABLE logistica_rutas ADD COLUMN activo TINYINT(1) NOT NULL DEFAULT 1 AFTER cumplimiento_pct");
+            }
+            if (!indexExists($pdo, 'logistica_rutas', 'idx_logistica_rutas_destino')) {
+                $pdo->exec("CREATE INDEX idx_logistica_rutas_destino ON logistica_rutas(destino)");
+            }
+        }
+
+        normalizarCatalogoLineasLogistica($pdo);
+
+        $lineasDemo = [
+            ['Loxagon', 1, 1, 'bajo', 24],
+            ['Bisonte', 2, 1, 'medio', 48],
+            ['Tres Guerras', 3, 0, 'bajo', 24],
+            ['Austral', 4, 1, 'alto', 72],
+        ];
+        $insLinea = $pdo->prepare("
+            INSERT INTO logistica_lineas
+                (nombre, prioridad, rastreo_tiempo_real, dias_operacion, horario_carga, horario_entrega, tiempo_carga_descarga_min, requiere_cita, anticipacion_cita_hrs, costo_relativo, activo)
+            VALUES (?, ?, ?, 'Lunes a sabado', '08:00-18:00', '09:00-19:00', 60, 1, ?, ?, 1)
+            ON DUPLICATE KEY UPDATE
+                prioridad = VALUES(prioridad),
+                rastreo_tiempo_real = VALUES(rastreo_tiempo_real),
+                anticipacion_cita_hrs = VALUES(anticipacion_cita_hrs),
+                costo_relativo = VALUES(costo_relativo),
+                activo = 1
+        ");
+        foreach ($lineasDemo as $lineaDemo) {
+            $insLinea->execute($lineaDemo);
+        }
+
+        $ids = [];
+        $lineasRows = $pdo->query("SELECT id, nombre FROM logistica_lineas")->fetchAll();
+        foreach ($lineasRows as $lr) {
+            $ids[(string)$lr['nombre']] = (int)$lr['id'];
+        }
+
+        $unidadesDemo = [
+            ['Loxagon', 'Torton', 'Seca', 14000, 500, 'General'],
+            ['Loxagon', 'Camioneta', 'Seca', 1500, 100, 'Fragil'],
+            ['Bisonte', 'Trailer', 'Refrigerada', 28000, 1000, 'Alimentos'],
+            ['Bisonte', 'Full', 'Seca', 45000, 2000, 'General'],
+            ['Tres Guerras', 'Rabon', 'Seca', 8000, 300, 'Fragil'],
+            ['Tres Guerras', 'Trailer', 'Plataforma', 30000, 1200, 'Peligrosa'],
+            ['Austral', 'Full', 'Plataforma', 45000, 2000, 'General'],
+            ['Austral', 'Torton', 'Refrigerada', 13000, 500, 'Alimentos'],
+        ];
+        $insUnidad = $pdo->prepare("
+            INSERT INTO logistica_unidades (linea_id, tipo, tipo_caja, capacidad_kg, peso_minimo, mercancia_permitida)
+            SELECT ?, ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+                SELECT 1 FROM logistica_unidades
+                WHERE linea_id = ? AND tipo = ? AND tipo_caja = ?
+            )
+        ");
+        foreach ($unidadesDemo as [$nombreLinea, $tipo, $caja, $capacidad, $pesoMin, $mercancia]) {
+            if (!isset($ids[$nombreLinea])) continue;
+            $lineaId = $ids[$nombreLinea];
+            $insUnidad->execute([$lineaId, $tipo, $caja, $capacidad, $pesoMin, $mercancia, $lineaId, $tipo, $caja]);
+        }
+
+        $rutasDemo = [
+            ['Loxagon', 'CDMX', 'Puebla', 'Centro', 'diaria', 'Ruta fija + peso', 5200, 18, 450, 300, 0, 24, 20, 28, 24, 96],
+            ['Loxagon', 'Queretaro', 'Leon', 'Bajio', 'diaria', 'Ruta fija', 6900, 18, 460, 280, 0, 24, 16, 26, 24, 96],
+            ['Bisonte', 'CDMX', 'Monterrey', 'Norte', 'semanal', 'Ruta fija + peso', 23800, 28, 1800, 750, 900, 72, 60, 84, 72, 89],
+            ['Bisonte', 'Toluca', 'Guadalajara', 'Occidente', 'semanal', 'Ruta fija + dimension', 16200, 25, 1150, 650, 500, 48, 40, 58, 48, 91],
+            ['Tres Guerras', 'CDMX', 'Puebla', 'Centro', 'diaria', 'Ruta fija', 5050, 18, 430, 280, 0, 24, 20, 30, 24, 92],
+            ['Tres Guerras', 'CDMX', 'Merida', 'Sureste', 'bajo demanda', 'Ruta fija + peso', 31800, 32, 2400, 900, 1200, 96, 84, 110, 96, 86],
+            ['Austral', 'Puebla', 'Veracruz', 'Golfo', 'bajo demanda', 'Ruta fija', 9800, 23, 700, 450, 300, 48, 34, 52, 48, 93],
+            ['Austral', 'CDMX', 'Cancun', 'Sureste', 'bajo demanda', 'Ruta fija + dimension', 35400, 35, 2600, 950, 1500, 96, 86, 112, 96, 87],
+        ];
+        $insRuta = $pdo->prepare("
+            INSERT INTO logistica_rutas
+                (linea_id, origen, destino, zona, frecuencia, tipo_cobro, tarifa_fija, costo_km_adicional, recargo_combustible, recargo_maniobras, recargo_zona_extendida, tiempo_estimado_hrs, tiempo_min_hrs, tiempo_max_hrs, sla_hrs, cumplimiento_pct, activo)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1
+            WHERE NOT EXISTS (
+                SELECT 1 FROM logistica_rutas
+                WHERE linea_id = ? AND origen = ? AND destino = ?
+            )
+        ");
+        foreach ($rutasDemo as $ruta) {
+            [$nombreLinea, $origen, $destino, $zona, $frecuencia, $tipoCobro, $tarifa, $km, $combustible, $maniobras, $zonaExt, $estimado, $min, $max, $sla, $cumplimiento] = $ruta;
+            if (!isset($ids[$nombreLinea])) continue;
+            $lineaId = $ids[$nombreLinea];
+            $insRuta->execute([$lineaId, $origen, $destino, $zona, $frecuencia, $tipoCobro, $tarifa, $km, $combustible, $maniobras, $zonaExt, $estimado, $min, $max, $sla, $cumplimiento, $lineaId, $origen, $destino]);
+        }
+
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS reportes_generados (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                tipo VARCHAR(80) NOT NULL,
+                periodo VARCHAR(20) NOT NULL,
+                fecha_inicio DATETIME NOT NULL,
+                fecha_fin DATETIME NOT NULL,
+                filtros_json TEXT NULL,
+                usuario_id INT NULL,
+                archivo VARCHAR(255) NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_reportes_tipo (tipo),
+                KEY idx_reportes_created (created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+        if (!columnExists($pdo, 'reportes_generados', 'archivo')) {
+            $pdo->exec("ALTER TABLE reportes_generados ADD COLUMN archivo VARCHAR(255) NULL AFTER usuario_id");
+        }
+
+        if (tableExists($pdo, 'pedidos') && tableExists($pdo, 'logistica_rutas')) {
+            $rutas = $pdo->query("
+                SELECT r.id, r.origen, r.destino, r.zona, l.nombre AS linea
+                FROM logistica_rutas r
+                JOIN logistica_lineas l ON l.id = r.linea_id
+                WHERE r.activo = 1
+                ORDER BY r.id ASC
+            ")->fetchAll();
+            if (!empty($rutas)) {
+                $pedidos = $pdo->query("SELECT id FROM pedidos WHERE transporte_linea IS NULL OR transporte_linea = '' OR logistica_ruta_id IS NULL")->fetchAll(PDO::FETCH_COLUMN);
+                $up = $pdo->prepare("
+                    UPDATE pedidos
+                    SET transporte_linea = ?,
+                        logistica_ruta_id = ?,
+                        ruta_origen = ?,
+                        ruta_destino = ?,
+                        ruta_zona = ?
+                    WHERE id = ?
+                ");
+                $countRutas = count($rutas);
+                foreach ($pedidos as $i => $pedidoId) {
+                    $ruta = $rutas[$i % $countRutas];
+                    $up->execute([$ruta['linea'], (int)$ruta['id'], $ruta['origen'], $ruta['destino'], $ruta['zona'], (int)$pedidoId]);
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // No bloquear la app por una migracion demo opcional.
+    }
+}
+
+function normalizarCatalogoLineasLogistica(PDO $pdo): void {
+    if (!tableExists($pdo, 'logistica_lineas')) {
+        return;
+    }
+
+    $duplicadas = $pdo->query("
+        SELECT nombre, MIN(id) AS keep_id, GROUP_CONCAT(id ORDER BY id) AS ids
+        FROM logistica_lineas
+        GROUP BY nombre
+        HAVING COUNT(*) > 1
+    ")->fetchAll();
+
+    foreach ($duplicadas as $dup) {
+        $ids = array_map('intval', explode(',', (string)$dup['ids']));
+        $keepId = (int)$dup['keep_id'];
+        $deleteIds = array_values(array_filter($ids, static fn($id) => $id !== $keepId));
+        if (!$deleteIds) {
+            continue;
+        }
+        $placeholders = implode(',', array_fill(0, count($deleteIds), '?'));
+        foreach (['logistica_unidades', 'logistica_rutas', 'logistica_citas'] as $tabla) {
+            if (tableExists($pdo, $tabla) && columnExists($pdo, $tabla, 'linea_id')) {
+                $stmt = $pdo->prepare("UPDATE {$tabla} SET linea_id = ? WHERE linea_id IN ({$placeholders})");
+                $stmt->execute(array_merge([$keepId], $deleteIds));
+            }
+        }
+        $stmt = $pdo->prepare("DELETE FROM logistica_lineas WHERE id IN ({$placeholders})");
+        $stmt->execute($deleteIds);
+    }
+
+    if (tableExists($pdo, 'logistica_unidades')) {
+        $pdo->exec("
+            DELETE u1 FROM logistica_unidades u1
+            JOIN logistica_unidades u2
+              ON u1.linea_id = u2.linea_id
+             AND u1.tipo = u2.tipo
+             AND u1.tipo_caja = u2.tipo_caja
+             AND u1.id > u2.id
+        ");
+    }
+
+    if (tableExists($pdo, 'logistica_rutas')) {
+        $pdo->exec("
+            DELETE r1 FROM logistica_rutas r1
+            JOIN logistica_rutas r2
+              ON r1.linea_id = r2.linea_id
+             AND r1.origen = r2.origen
+             AND r1.destino = r2.destino
+             AND r1.id > r2.id
+        ");
+    }
+
+    if (!indexExists($pdo, 'logistica_lineas', 'ux_logistica_lineas_nombre')) {
+        $pdo->exec("ALTER TABLE logistica_lineas ADD UNIQUE KEY ux_logistica_lineas_nombre (nombre)");
+    }
 }

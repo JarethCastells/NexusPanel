@@ -661,6 +661,7 @@ if (isset($_GET['action'])) {
         <?php if ($esAdmin): ?><a href="pages/usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
         <a href="pages/productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pages/pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
+        <a href="pages/reportes_ventas.php" class="nav-item"><i class="fa-solid fa-file-excel"></i><span>Reportes</span></a>
         <a href="pages/mensajes.php" class="nav-item"><i class="fa-solid fa-comments"></i><span>Mensajes internos</span></a>
         <a href="whatsapp.php" class="nav-item active"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span><div class="nav-indicator"></div></a>
         <div class="nav-section-label">Cuenta</div>

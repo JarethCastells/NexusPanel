@@ -82,6 +82,7 @@ $operadorId = (int)($_GET['operador_id'] ?? ($operadores[0]['id'] ?? 0));
         <?php if ($esAdmin): ?><a href="usuarios.php" class="nav-item"><i class="fa-solid fa-users"></i><span>Usuarios</span></a><?php endif; ?>
         <a href="productos.php" class="nav-item"><i class="fa-solid fa-flask-vial"></i><span>Productos e inventario</span></a>
         <a href="pedidos.php" class="nav-item"><i class="fa-solid fa-receipt"></i><span>Pedidos</span></a>
+        <a href="reportes_ventas.php" class="nav-item"><i class="fa-solid fa-file-excel"></i><span>Reportes</span></a>
         
         <a href="mensajes.php" class="nav-item active"><i class="fa-solid fa-comments"></i><span>Mensajes internos</span><div class="nav-indicator"></div></a>
         <a href="../whatsapp.php" class="nav-item"><i class="fa-brands fa-whatsapp"></i><span>WhatsApp</span></a>

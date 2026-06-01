@@ -6,6 +6,7 @@ vendor/
 storage/logs/
 storage/sessions/
 uploads/
+outputs/
 _codex_write_probe.tmp
 _rebase_backups/
 OpenWA/openwa
